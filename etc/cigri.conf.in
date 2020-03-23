@@ -26,13 +26,13 @@ DEFAULT_JOB_WALLTIME = "01:00:00"
 # (meaning we should stop queuing jobs until the stress factor becomes
 # again acceptable). Note that a cluster under stress is not blacklisted
 # so that we can still update job statuses.
-STRESS_FACTOR="0.8"
+STRESS_FACTOR="8.0"
 
 #############################################################################
 ## LOGGING OPTIONS
 #############################################################################
 #File where to log (STDOUT AND STDERR are accepted as  well)
-LOG_FILE = "/var/log/cigri.log"
+LOG_FILE = "STDERR"
 # loglevel as supported by the ruby logger (FATAL, ERROR, WARN, INFO, DEBUG)
 LOG_LEVEL = "INFO"
 # Job debugging. Set to 1 if you want to dump all submitted jobs
@@ -66,18 +66,18 @@ REST_CLIENT_KEY_FILE="/etc/cigri/ssl/cigri.key"
 # Minimum cycle duration
 # The runner sleeps this time of seconds if necessary to prevent
 # from looping too fast and let the time to clusters for jobs digestion
-RUNNER_MIN_CYCLE_DURATION = "15"
+RUNNER_MIN_CYCLE_DURATION = "30"
 # Default initial number of jobs to submit
 # The runner submits several jobs at a time using oar array jobs.
 # This number specifies the initial number of jobs to submit. Then,
 # the runner may decide to increase or decreseases this number.
-RUNNER_DEFAULT_INITIAL_NUMBER_OF_JOBS = "3" 
+RUNNER_DEFAULT_INITIAL_NUMBER_OF_JOBS = "100" 
 # Increase (or decrease) the number of jobs submitted at each succesful cycle
 # by this value 
-RUNNER_TAP_INCREASE_FACTOR = "1.5"
+RUNNER_TAP_INCREASE_FACTOR = "1"
 # Maximum number of jobs submitted by a runner cycle (maximum
 # array job size)
-RUNNER_TAP_INCREASE_MAX = "100"
+RUNNER_TAP_INCREASE_MAX = "500"
 # Grace period for a closed tap: when a tap is closed, it is maybe just
 # beacuse the cluster needs some time to pass the jobs to the running state.
 # So, we don't directly try the next campaign, but wait a bit.
@@ -127,3 +127,4 @@ GRID_USAGE_UPDATE_PERIOD="60"
 # Dirty wait for maximizing chances of gridusage processes synchro
 # Ignored if GRID_USAGE_UPDATE_PERIOD is set to 0
 GRID_USAGE_SYNC_TIME="10"
+LOG_CONTROL_FILE="/tmp/log.txt"
