@@ -270,7 +270,7 @@ module Cigri
        if walltime.nil? && campaign.clusters[cluster_id]["walltime"]
          walltime=campaign.clusters[cluster_id]["walltime"]
        end
-       submission_string["resources"]=submission_string["resources"]+",walltime="+walltime if walltime and submission_string["resources"].kind_of?(String)
+       submission_string["resources"]=submission_string["resources"]+",walltime="+walltime if walltime
        #expand {CAMPAIGN_ID} macro into exec_directory
        exec_directory=campaign.clusters[cluster_id]["exec_directory"].gsub(/{CAMPAIGN_ID}/,campaign.id.to_s)
        submission_string["directory"]=exec_directory if campaign.clusters[cluster_id]["exec_directory"] and tag != "prologue" and tag != "epilogue"
@@ -385,6 +385,15 @@ module Cigri
       end
     end 
 
+    def ctrl(ref,queue_load,kp,ki,memoire)
+      epsilon=ref - queue_load
+      somme=memoire + epsilon
+      pk = kp * epsilon
+      ik = ki*6.8716*somme
+      result = pk + ik
+      return result,somme
+    end
+
     # Submit the jobset on the cluster corresponding to cluster_id
     # Second implementation
     # Grouping optimization is done whenever it is possible: 
@@ -442,7 +451,6 @@ module Cigri
             else
               # Array grouping
               params=jobs.collect {|job| job.props[:param]}
-	      JOBLIBLOGGER.debug("resources: "+campaign.clusters[cluster_id]["resources"].inspect)
               submission = {
                             "param_file" => params.join("\n"),
                             "resources" => campaign.clusters[cluster_id]["resources"],
@@ -572,7 +580,7 @@ module Cigri
     # Get jobs to launch on cluster cluster_id, with a limit per campaign
     # The tap hash contains the tap objects: open/closed and value of the 
     # max number of jobs to get (rate)
-    def get_next(cluster_id,taps={})
+    def get_next(cluster_id,taps={},rate)
       # Get the jobs order by priority
       jobs=get("jobs_to_launch,bag_of_tasks","*","cluster_id=#{cluster_id} 
                                                     AND task_id=bag_of_tasks.id
@@ -592,7 +600,7 @@ module Cigri
       campaigns.each {|c| running_campaigns[c.id]=true }
       # We have to loop over each job, to check campaigns and taps
       jobs.each do |job|
-        rate=0
+        #rate=0
         campaign_id=job[:campaign_id].to_i
         # Skip paused campaigns
         if running_campaigns[campaign_id].nil? or running_campaigns[campaign_id]!=true
@@ -601,9 +609,9 @@ module Cigri
         end
         # Get the rate
         counts[campaign_id] ? counts[campaign_id]+=1 : counts[campaign_id]=1
-        if not taps[campaign_id].nil?
-          rate=taps[campaign_id].props[:rate].to_i
-        end
+        #if not taps[campaign_id].nil?
+        #  rate=taps[campaign_id].props[:rate].to_i
+        #end
         # If the tap is closed since a short time, dont' send jobs
         # to the runner. It causes the runner to wait a bit for jobs to start.
         if not taps[campaign_id].open? and 
@@ -1098,3 +1106,4 @@ module Cigri
   end # Class Campaignset
   
 end # module Cigri
+
