@@ -8,11 +8,15 @@ require 'cigri-joblib'
 require 'cigri-eventlib'
 require 'cigri-colombolib'
 require 'cigri-runnerlib'
+require 'cigri-control'
+require 'matrix'
 
 config = Cigri.conf
 logfile=config.get('LOG_FILE',"STDOUT")
 logger = Cigri::Logger.new("RUNNER #{ARGV[0]}", logfile)
 
+strlogfile = config.get('LOG_CTRL_FILE',"/tmp/log.txt")
+file = File.new(strlogfile, File::CREAT|File::TRUNC|File::RDWR, 0777)
 RUNNER_TAP_INCREASE_FACTOR=CONF.get('RUNNER_TAP_INCREASE_FACTOR',"1.5").to_f
 
 if logfile != "STDOUT" && logfile != "STDERR"
@@ -43,14 +47,54 @@ else
   MIN_CYCLE_DURATION = 5
 end
 
+MIN_CYCLE_DURATION = 5
+
 def notify_judas
   Process.kill("USR1",Process.ppid)
 end
 
+##########################################################################
+# Some math definitions for the controller
+##########################################################################
+
+x_est = Matrix[[0, 0, 1e-2, 0, 0, 1e-1]].transpose
+dt = MIN_CYCLE_DURATION
+q_ref = 30
+r_ref = 500
+f_ref = 100
+overload = false
+i = 0
+
+# Process noise covariance
+Q = Matrix[[1,   0, 0,      0,   0,  0],
+           [0,   1, 0,      0,   0,  0],
+           [0,   0, 1e-6,   0,   0,  0],
+           [0,   0, 0,      1,   0,  0],
+           [0,   0, 0,      0, 1e-1, 0],
+           [0,   0, 0,      0,   0,  0]]*1e2
+                          
+R = 50 # Measurement noise covariance
+
+P = Matrix[[1, 0, 0, 0,    0,    0],
+           [0, 1, 0, 0,    0,    0],
+           [0, 0, 0, 0,    0,    0],
+           [0, 0, 0, 1,    0,    0],
+           [0, 0, 0, 0, 1e-1,    0],
+           [0, 0, 0, 0,    0, 1e-3]]*1e2
+                         
+H = Matrix[[1, 0, 0, 0, 0, 0],
+           [0, 1, 0, 0, 0, 0],
+           [0, 0, 0, 0, 1, 0]]
+                         
+rv = Array.new; rv.push 0
+
 #Main runner loop
 logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
+
 while true do
+
+  loop_time = Time.now
 
   logger.debug('New iteration')
 
@@ -190,8 +234,8 @@ while true do
             when /Waiting/i
               job.update({'state' => 'remote_waiting'})
               # close the tap
-              cluster.taps[campaign_id].close
-              tap_can_be_opened[cluster.taps[campaign_id].id]=false
+              # cluster.taps[campaign_id].close
+              # tap_can_be_opened[cluster.taps[campaign_id].id]=false
             else
               # close the tap
               cluster.taps[campaign_id].close
@@ -242,13 +286,72 @@ while true do
     #
     # Get the jobs to launch and submit them
     #
+    # Read the value
+    
+    cluster_jobs=cluster.get_jobs()
+    
+    # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
+    q_sampled = cluster_jobs.select{ |j| j["state"]=="Waiting" }.length
+    r_sampled = cluster_jobs.select{ |j| j["state"]=="Running" }.length +
+                cluster_jobs.select{ |j| j["state"]=="Finishing" }.length +
+                cluster_jobs.select{ |j| j["state"]=="Launching" }.length
+                
+    f = cluster.get_global_stress_factor()
+	logger.warn("STRESS FACTOR : #{f}")
+              
+    rv.push(r_sampled)
+    
+    # Keep the history to 10 values           
+    if rv.length > 5
+      rv.shift
+    end
+    rmax_est = rv.max + 10
+    i += 1
+  
+    export2file("Waiting",q_sampled,ARGV[0],strlogfile,loop_time)
+    export2file("Running",r_sampled,ARGV[0],strlogfile,loop_time)
+    export2file("Stress",f,ARGV[0],strlogfile,loop_time)
+    
     logger.debug("Jobs submissions")
     tolaunch_jobs = Cigri::JobtolaunchSet.new
     # Get the jobs in state to_launch (should only happen for prologue/epilogue or after  a crash)
     jobs=Cigri::Jobset.new(:where => "jobs.state='to_launch' and jobs.cluster_id=#{cluster.id}")
     jobs.remove_blacklisted(cluster.id)
-    # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
-    if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps) > 0 # if the tap is open
+ 
+    # Kalman filter
+	ym = Matrix[[q_sampled],[r_sampled],[f]] - H*x_est
+	K = P*(H.transpose)*(( Matrix.build((H*P*H.transpose).row_count) {R} + H*P*H.transpose ).inverse)
+	x_est = x_est + (K*ym)
+	P = (Matrix.identity((K*H).row_count) - K*H)*P
+
+	# Export x_est y r
+	export2file("x_est",x_est[0,0],ARGV[0],strlogfile,loop_time)
+	export2file("r_est",x_est[1,0],ARGV[0],strlogfile,loop_time)
+	export2file("kin",x_est[5,0],ARGV[0],strlogfile,loop_time)
+	export2file("p",x_est[2,0],ARGV[0],strlogfile,loop_time)
+	export2file("f",x_est[5,0],ARGV[0],strlogfile,loop_time)
+	
+	overload = false
+	#overload = (i>160)
+	#export2file("overload",(overload ? 1 : 0),ARGV[0],strlogfile)
+
+	# Compute u
+	# I changed this to try something, please put it back
+	# nb_allow_jobs = costfit(x_est[0,0],x_est[1,0],x_est[2,0],rmax_est,q_ref,r_ref,dt,overload)
+	nb_allow_jobs = costfit(q_sampled,r_sampled,f,x_est[2,0],x_est[5,0],rmax_est,q_ref,r_ref,f_ref,dt,overload)
+	export2file("Running_max",rmax_est,ARGV[0],strlogfile,loop_time)
+	logger.warn("Nombre jobs allow : #{nb_allow_jobs}")
+	logger.warn("i : #{i}")
+	u = 0
+
+	# Exportar prediccion
+    # TODO
+    
+    if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps, nb_allow_jobs) > 0 # if the tap is open
+    
+	  # Export action
+      export2file("Action",nb_allow_jobs,ARGV[0],strlogfile,loop_time)
+    
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
@@ -258,7 +361,13 @@ while true do
     if jobs!= false and jobs.length > 0
       # Submit the new jobs
       begin
+      
         submitted_jobs=jobs.submit2(cluster.id)
+        
+        # Export my controller's action
+        
+        u = nb_allow_jobs
+        
       rescue Cigri::ClusterAPIConnectionError => e
         message = "Could not submit jobs #{jobs.ids.inspect} on #{cluster.name} because of an API error. Automatically resubmitting."
         jobs.each do |job|
@@ -270,18 +379,6 @@ while true do
         jobs.each do |job|
           job.update({'state' => 'event'})
           event=Cigri::Event.new(:class => "job", :code => "RUNNER_SUBMIT_TIMEOUT",
-                                 :cluster_id => cluster.id, :job_id => job.id,
-                                 :message => message, :campaign_id => job.props[:campaign_id])
-          Cigri::Colombo.new(event).check
-          Cigri::Colombo.new(event).check_jobs
-          have_to_notify = true
-        end
-        logger.warn(message)
-      rescue Cigri::ClusterAPITooLarge => e
-        message = "Request too large for jobs submit #{jobs.ids.inspect} on #{cluster.name}. Your parameters string is maybe too large. Consider indexing your parameters."
-        jobs.each do |job|
-          job.update({'state' => 'event'})
-          event=Cigri::Event.new(:class => "job", :code => "RUNNER_SUBMIT_TOO_LARGE",
                                  :cluster_id => cluster.id, :job_id => job.id,
                                  :message => message, :campaign_id => job.props[:campaign_id])
           Cigri::Colombo.new(event).check
@@ -321,6 +418,27 @@ while true do
         end
       end
     end
+    
+    # Compute new covariance matrix
+    asd = x_est[3,0]**2.05
+    asd = asd.real
+    
+	A = Matrix[[1,       0,                0,        -dt,          0,                0],
+               [0, 1-dt*x_est[2,0], -dt*x_est[1,0],   dt,          0,                0],
+               [0,       0,                1,          0,          0,                0],
+               [0,       0,                0,          1,          0,                0],
+               [0,       0,                0,          0, 1-0.015*dt,              asd],
+               [0,       0,                0,          0,          0,                1]]
+	P = (A*P*(A.transpose)) + Q
+	
+	# Predict future value
+	x_est = *x_est
+	x_est[0][0],x_est[1][0],x_est[4][0] = cigri_model(x_est[0][0],x_est[1][0],x_est[4][0],x_est[2][0],x_est[5][0],rmax_est,u,dt)
+	x_est[3][0] = b(x_est[0][0],x_est[1][0],rmax_est)
+	x_est = Matrix[*x_est]
+	
+	logger.info("x_est_despues: #{x_est}")
+    
   end 
 
   # notify
