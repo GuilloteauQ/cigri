@@ -8,11 +8,14 @@ require 'cigri-joblib'
 require 'cigri-eventlib'
 require 'cigri-colombolib'
 require 'cigri-runnerlib'
+require 'cigri-control'
 
 config = Cigri.conf
 logfile=config.get('LOG_FILE',"STDOUT")
 logger = Cigri::Logger.new("RUNNER #{ARGV[0]}", logfile)
 
+strlogfile = config.get('LOG_CTRL_FILE',"/tmp/log.txt")
+file = File.new(strlogfile, File::CREAT|File::TRUNC|File::RDWR, 0777)
 RUNNER_TAP_INCREASE_FACTOR=CONF.get('RUNNER_TAP_INCREASE_FACTOR',"1.5").to_f
 
 if logfile != "STDOUT" && logfile != "STDERR"
@@ -43,14 +46,21 @@ else
   MIN_CYCLE_DURATION = 5
 end
 
+MIN_CYCLE_DURATION = 5
+
 def notify_judas
   Process.kill("USR1",Process.ppid)
 end
+
+k = 0
 
 #Main runner loop
 logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
 while true do
+
+  k += 1
+  loop_time = Time.now
 
   logger.debug('New iteration')
 
@@ -59,7 +69,7 @@ while true do
   current_jobs.get_submitted(cluster.id)
   current_jobs.get_running(cluster.id)
   current_jobs.to_jobs
-
+  
   # init taps
   cluster.reset_taps
   (current_jobs.campaigns + cluster.running_campaigns).uniq.each do |campaign_id|
@@ -190,8 +200,8 @@ while true do
             when /Waiting/i
               job.update({'state' => 'remote_waiting'})
               # close the tap
-              cluster.taps[campaign_id].close
-              tap_can_be_opened[cluster.taps[campaign_id].id]=false
+              #cluster.taps[campaign_id].close
+              #tap_can_be_opened[cluster.taps[campaign_id].id]=false
             else
               # close the tap
               cluster.taps[campaign_id].close
@@ -242,14 +252,52 @@ while true do
     #
     # Get the jobs to launch and submit them
     #
+    
+    cluster_jobs=cluster.get_jobs()
+  
+	# Read the value
+	r_sampled = cluster_jobs.select{ |j| j["state"]=="Running" }.length +
+				cluster_jobs.select{ |j| j["state"]=="Finishing" }.length +
+				cluster_jobs.select{ |j| j["state"]=="Launching" }.length
+	
+	export2file("Waiting",cluster_jobs.select{ |j| j["state"]=="Waiting" }.length,ARGV[0],strlogfile,loop_time)
+	export2file("Running",r_sampled,ARGV[0],strlogfile,loop_time)
+	
+	export2file("Stress",cluster.get_global_stress_factor(),ARGV[0],strlogfile,loop_time)
+	logger.warn("STRESS FACTOR : #{cluster.get_global_stress_factor()}")
+    
     logger.debug("Jobs submissions")
     tolaunch_jobs = Cigri::JobtolaunchSet.new
     # Get the jobs in state to_launch (should only happen for prologue/epilogue or after  a crash)
     jobs=Cigri::Jobset.new(:where => "jobs.state='to_launch' and jobs.cluster_id=#{cluster.id}")
     jobs.remove_blacklisted(cluster.id)
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
-    if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps) > 0 # if the tap is open
+    nb_allow_jobs = 1
+    if k > 20
+      nb_allow_jobs = 0
+    end
+    if k > 50
+      nb_allow_jobs = 2
+    end
+    if k > 70
+      nb_allow_jobs = 0
+    end
+    if k > 100
+      nb_allow_jobs = 3
+    end
+    if k > 120
+      nb_allow_jobs = 0
+    end
+    if k > 150
+      nb_allow_jobs = 4
+    end
+    if k > 170
+      nb_allow_jobs = 0
+    end
+    logger.warn("Nombre jobs allow : #{nb_allow_jobs}")
+    if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps, nb_allow_jobs) > 0 # if the tap is open	    
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
+      export2file("Action",tolaunch_jobs.length,ARGV[0],strlogfile,loop_time)
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
       # Remove jobs from blacklisted campaigns
@@ -277,18 +325,6 @@ while true do
           have_to_notify = true
         end
         logger.warn(message)
-      rescue Cigri::ClusterAPITooLarge => e
-        message = "Request too large for jobs submit #{jobs.ids.inspect} on #{cluster.name}. Your parameters string is maybe too large. Consider indexing your parameters."
-        jobs.each do |job|
-          job.update({'state' => 'event'})
-          event=Cigri::Event.new(:class => "job", :code => "RUNNER_SUBMIT_TOO_LARGE",
-                                 :cluster_id => cluster.id, :job_id => job.id,
-                                 :message => message, :campaign_id => job.props[:campaign_id])
-          Cigri::Colombo.new(event).check
-          Cigri::Colombo.new(event).check_jobs
-          have_to_notify = true
-        end
-        logger.warn(message)
       rescue => e
         message = "Could not submit jobs #{jobs.ids.inspect} on #{cluster.name}: #{e}\n#{e.backtrace}"
         jobs.each do |job|
@@ -302,7 +338,8 @@ while true do
         end
         logger.warn(message)
       end
-      sleep 3 # wait a little bit as we just submitted some jobs
+      
+      # sleep 3 # wait a little bit as we just submitted some jobs
       # Increase tap of the first campaign that runs well
       # (in case we submitted for several campaigns, but this should
       # not happen with the Jobset::submit2 method)
@@ -330,3 +367,4 @@ while true do
   cycle_duration = Time::now.to_i - start_time
   sleep MIN_CYCLE_DURATION - cycle_duration if cycle_duration < MIN_CYCLE_DURATION
 end
+
