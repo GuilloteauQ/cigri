@@ -86,7 +86,7 @@ H = Matrix[[1, 0, 0, 0, 0, 0],
            [0, 1, 0, 0, 0, 0],
            [0, 0, 0, 0, 1, 0]]
                          
-rv = Array.new; rv.push 0
+rv = Array.new; rv.push 100
 
 #Main runner loop
 logger.info("Starting runner on #{ARGV[0]}")
