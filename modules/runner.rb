@@ -14,7 +14,8 @@ config = Cigri.conf
 logfile=config.get('LOG_FILE',"STDOUT")
 logger = Cigri::Logger.new("RUNNER #{ARGV[0]}", logfile)
 
-file = File.new("/home/docker/jew/logs/log.txt", File::CREAT|File::TRUNC|File::RDWR, 0777)
+strlogfile = config.get('LOG_CTRL_FILE',"/tmp/log.txt")
+file = File.new(strlogfile, File::CREAT|File::TRUNC|File::RDWR, 0777)
 RUNNER_TAP_INCREASE_FACTOR=CONF.get('RUNNER_TAP_INCREASE_FACTOR',"1.5").to_f
 
 if logfile != "STDOUT" && logfile != "STDERR"
@@ -260,9 +261,10 @@ while true do
     jobs=Cigri::Jobset.new(:where => "jobs.state='to_launch' and jobs.cluster_id=#{cluster.id}")
     jobs.remove_blacklisted(cluster.id)
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
+    export2file("Action",tolaunch_jobs.length,ARGV[0])
     if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
-      export2file("Action",tolaunch_jobs.length,ARGV[0])
+      #export2file("Action",tolaunch_jobs.length,ARGV[0])
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
       # Remove jobs from blacklisted campaigns
