@@ -626,6 +626,81 @@ module Cigri
       return self.length
     end
 
+    def get_next_with_respect_to_load(cluster_id,taps={}, rate, campaign_loads)
+      # Get the jobs order by priority
+      jobs=get("jobs_to_launch,bag_of_tasks","*","cluster_id=#{cluster_id} 
+                                                    AND task_id=bag_of_tasks.id
+                                                    ORDER BY bag_of_tasks.priority DESC, order_num, jobs_to_launch.id")
+      counts={}
+      # Percentage of each campaign in the buffer
+      cluster=Cluster.new(:id => cluster_id)
+      # Check for blacklisted and paused campaigns
+      campaigns_blacklist={}
+      jobs.each {|j| campaigns_blacklist[j[:campaign_id].to_i]=false}
+      campaigns_blacklist.each_key do |c|
+        campaigns_blacklist[c]=true if cluster.blacklisted?(:campaign_id => c)
+      end
+      running_campaigns={}
+      new_campaigns= {}
+      campaigns=Campaignset.new
+      campaigns.get_running
+      campaigns.each {|c| running_campaigns[c.id]=true }
+      # We have to loop over each job, to check campaigns and taps
+      jobs.each do |job|
+        campaign_id=job[:campaign_id].to_i
+        if campaign_loads[campaign_id].nil?
+          new_campaigns[campaign_id] = true
+        end
+        # Skip paused campaigns
+        if running_campaigns[campaign_id].nil? or running_campaigns[campaign_id]!=true
+          JOBLIBLOGGER.debug("Campaign #{campaign_id} is not running (paused?)")
+          next
+        end
+        # If the tap is closed since a short time, dont' send jobs
+        # to the runner. It causes the runner to wait a bit for jobs to start.
+        if not taps[campaign_id].open? and 
+             (Time::now().to_i - Time.parse(taps[campaign_id].props[:close_date]).to_i) < RUNNER_TAP_GRACE_PERIOD
+           JOBLIBLOGGER.info("Waiting for tap grace period on cluster #{cluster_id} for campaign #{campaign_id}")
+           break
+        end
+      end
+      rates = {}
+      # If there is a new campaign
+      if new_campaigns.length > 0
+        #selected_campaigns = new_campaigns.select{ |id| taps[id].open? and not campaigns_blacklist[id] }
+        p "I am a new campaign"
+        selected_campaigns = new_campaigns.select{ |id, status| !campaigns_blacklist[id] }.keys
+        campaign_id = selected_campaigns[0]
+        rates[campaign_id] = 100
+        campaign_loads[campaign_id] = -1
+      else
+        # selected_campaigns = running_campaigns.select{ |id, is_running| is_running and taps[id].open? and not campaigns_blacklist[id] }
+        selected_campaigns = running_campaigns.select{ |id, is_running| is_running and not campaigns_blacklist[id] }
+        print selected_campaigns
+        selected_campaigns = selected_campaigns.keys.sort()
+        
+        if selected_campaigns.length == 1
+          rates[selected_campaigns[0]] = 100
+        elsif selected_campaigns.length > 1
+          rates[selected_campaigns[0]] = 60
+          rates[selected_campaigns[1]] = 40
+        end
+      end
+      counts={}
+      # get the 2 campaigns with lowest id that are open and not blacklisted
+      p rates
+      # jobs.select{|j| !selected_campaigns[j[:campaign_id].to_i].nil? }.each do |job| 
+      jobs.select{|j| !rates[j[:campaign_id].to_i].nil? }.each do |job| 
+        campaign_id = job[:campaign_id].to_i
+        counts[campaign_id] ? counts[campaign_id]+=1 : counts[campaign_id]=1
+        if counts[campaign_id] <= rates[campaign_id] * rate / 100
+          job[:nodb]=true
+          @records << Datarecord.new(@table,job) 
+        end
+      end
+      return self.length
+    end
+
     # Get jobs to launch on cluster cluster_id, with a limit per campaign
     # The tap hash contains the tap objects: open/closed and value of the 
     # max number of jobs to get (rate)
@@ -635,7 +710,6 @@ module Cigri
                                                     AND task_id=bag_of_tasks.id
                                                     ORDER BY bag_of_tasks.priority DESC, order_num, jobs_to_launch.id")
       counts={}
-      old_campaign_id=0
       # Percentage of each campaign in the buffer
       cluster=Cluster.new(:id => cluster_id)
       # Check for blacklisted and paused campaigns
@@ -656,11 +730,6 @@ module Cigri
           JOBLIBLOGGER.debug("Campaign #{campaign_id} is not running (paused?)")
           next
         end
-        # Get the rate
-        # counts[campaign_id] ? counts[campaign_id]+=1 : counts[campaign_id]=1
-        # if not taps[campaign_id].nil?
-        #   rate=taps[campaign_id].props[:rate].to_i
-        # end
         # If the tap is closed since a short time, dont' send jobs
         # to the runner. It causes the runner to wait a bit for jobs to start.
         if not taps[campaign_id].open? and 
@@ -673,6 +742,7 @@ module Cigri
       # get the 2 campaigns with lowest id that are open and not blacklisted
       selected_campaigns = running_campaigns.select{ |id, is_running| is_running and taps[id].open? and not campaigns_blacklist[id] }
       selected_campaigns = Hash[selected_campaigns.sort_by { |k,v| k }[0..1]]
+      print selected_campaigns
       jobs.select{|j| !selected_campaigns[j[:campaign_id].to_i].nil? }.each do |job| 
         campaign_id = job[:campaign_id].to_i
         counts[campaign_id] ? counts[campaign_id]+=1 : counts[campaign_id]=1
