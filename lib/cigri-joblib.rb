@@ -626,7 +626,7 @@ module Cigri
       return self.length
     end
 
-    def get_next_with_respect_to_load(cluster_id,taps={}, rate, campaign_loads)
+    def get_next_with_respect_to_load(cluster_id,taps={}, rate, campaign_loads, percentage)
       # Get the jobs order by priority
       jobs=get("jobs_to_launch,bag_of_tasks","*","cluster_id=#{cluster_id} 
                                                     AND task_id=bag_of_tasks.id
@@ -650,6 +650,7 @@ module Cigri
         campaign_id=job[:campaign_id].to_i
         if campaign_loads[campaign_id].nil?
           new_campaigns[campaign_id] = true
+          break
         end
         # Skip paused campaigns
         if running_campaigns[campaign_id].nil? or running_campaigns[campaign_id]!=true
@@ -665,26 +666,36 @@ module Cigri
         end
       end
       rates = {}
-      # If there is a new campaign
-      if new_campaigns.length > 0
+      # If there is no new campaign
+      if jobs.length > 0 and new_campaigns.length == 0
+        # selected_campaigns = running_campaigns.select{ |id, is_running| is_running and taps[id].open? and not campaigns_blacklist[id] }
+        selected_campaigns = running_campaigns.select{ |id, is_running| is_running and not campaigns_blacklist[id] and !campaign_loads[id].nil?  and campaign_loads[id] > 0 }
+        # selected_campaigns = campaign_loads.select{ |id, load_per_job| running_campaigns[id] and not campaigns_blacklist[id] }
+        print selected_campaigns
+        selected_campaigns = selected_campaigns.keys.sort()
+        
+        if selected_campaigns.length == 1
+          rates[selected_campaigns[0]] = percentage.to_i
+        elsif selected_campaigns.length > 1
+          campaign_id0 = selected_campaigns[0] 
+          campaign_id1 = selected_campaigns[1] 
+          if campaign_loads[campaign_id0] > campaign_loads[campaign_id1]
+            campaign_id_heavy = campaign_id0
+            campaign_id_light = campaign_id1
+          else 
+            campaign_id_heavy = campaign_id1
+            campaign_id_light = campaign_id0
+          end
+          rates[campaign_id_heavy] = percentage.to_i
+          rates[campaign_id_light] = 100 - percentage.to_i
+        end
+      else
         #selected_campaigns = new_campaigns.select{ |id| taps[id].open? and not campaigns_blacklist[id] }
         p "I am a new campaign"
         selected_campaigns = new_campaigns.select{ |id, status| !campaigns_blacklist[id] }.keys
         campaign_id = selected_campaigns[0]
         rates[campaign_id] = 100
-        campaign_loads[campaign_id] = -1
-      else
-        # selected_campaigns = running_campaigns.select{ |id, is_running| is_running and taps[id].open? and not campaigns_blacklist[id] }
-        selected_campaigns = running_campaigns.select{ |id, is_running| is_running and not campaigns_blacklist[id] }
-        print selected_campaigns
-        selected_campaigns = selected_campaigns.keys.sort()
-        
-        if selected_campaigns.length == 1
-          rates[selected_campaigns[0]] = 100
-        elsif selected_campaigns.length > 1
-          rates[selected_campaigns[0]] = 60
-          rates[selected_campaigns[1]] = 40
-        end
+        campaign_loads[campaign_id] = -rate
       end
       counts={}
       # get the 2 campaigns with lowest id that are open and not blacklisted

@@ -47,10 +47,21 @@ def notify_judas
   Process.kill("USR1",Process.ppid)
 end
 
+def p_controller(current_percentage, reference, cluster)
+  kp = 2
+  error = reference - cluster.get_global_stress_factor
+  new_percentage = current_percentage + kp * error
+  p new_percentage
+  return new_percentage
+end
+
+
 #Main runner loop
 logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
 campaign_loads = {}
+percentage = 50
+reference_stress_factor = 2
 while true do
 
   logger.debug('New iteration')
@@ -75,6 +86,8 @@ while true do
 
   start_time = Time::now.to_i
   have_to_notify = false
+
+  stress_factor = cluster.get_global_stress_factor
 
   ##########################################################################
   # Jobs control
@@ -150,6 +163,9 @@ while true do
                 have_to_notify = true
               else
                 job.update({'state' => 'terminated','stop_time' => to_sql_timestamp(stop_time)})
+                if !campaign_loads[campaign_id].nil? and campaign_loads[campaign_id] < 0
+                  campaign_loads[campaign_id] = stress_factor / (- campaign_loads[campaign_id])
+                end
               end
             when /Error/i
               logger.info("Job #{job.id} is in Error state.")
@@ -251,7 +267,8 @@ while true do
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
     #if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps) > 0 # if the tap is open
     p campaign_loads
-    if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, 10, campaign_loads) > 0 # if the tap is open
+    percentage = p_controller(percentage, reference_stress_factor, cluster)
+    if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, 10, campaign_loads, percentage) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
