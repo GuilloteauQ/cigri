@@ -645,13 +645,21 @@ module Cigri
       campaigns=Campaignset.new
       campaigns.get_running
       campaigns.each {|c| running_campaigns[c.id]=true }
+      campaign_heaviness = {}
+      #campaigns.each {|c| campaign_heaviness[c.id]=c.heaviness }
+      pp cluster
+      campaigns.each do |c|
+        json = JSON.parse(c.props[:jdl])
+        campaign_heaviness[c.id] = json["clusters"][cluster.name]["heaviness"]
+      end
+      # campaigns.each {|c| campaign_heaviness[c.id]=c[:heaviness] }
       # We have to loop over each job, to check campaigns and taps
       jobs.each do |job|
         campaign_id=job[:campaign_id].to_i
-        if campaign_loads[campaign_id].nil?
-          new_campaigns[campaign_id] = true
-          break
-        end
+        # if campaign_loads[campaign_id].nil?
+        #   new_campaigns[campaign_id] = true
+        #   break
+        # end
         # Skip paused campaigns
         if running_campaigns[campaign_id].nil? or running_campaigns[campaign_id]!=true
           JOBLIBLOGGER.debug("Campaign #{campaign_id} is not running (paused?)")
@@ -667,11 +675,12 @@ module Cigri
       end
       rates = {}
       # If there is no new campaign
-      if jobs.length > 0 and new_campaigns.length == 0
+      #if jobs.length > 0 and new_campaigns.length == 0
         # selected_campaigns = running_campaigns.select{ |id, is_running| is_running and taps[id].open? and not campaigns_blacklist[id] }
-        selected_campaigns = running_campaigns.select{ |id, is_running| is_running and not campaigns_blacklist[id] and !campaign_loads[id].nil?  and campaign_loads[id] > 0 }
+        selected_campaigns = running_campaigns.select{ |id, is_running| is_running and not campaigns_blacklist[id] }
+        # TODO select one heavy and one light
         # selected_campaigns = campaign_loads.select{ |id, load_per_job| running_campaigns[id] and not campaigns_blacklist[id] }
-        print selected_campaigns
+        # print selected_campaigns
         selected_campaigns = selected_campaigns.keys.sort()
         
         if selected_campaigns.length == 1
@@ -679,24 +688,25 @@ module Cigri
         elsif selected_campaigns.length > 1
           campaign_id0 = selected_campaigns[0] 
           campaign_id1 = selected_campaigns[1] 
-          if campaign_loads[campaign_id0] > campaign_loads[campaign_id1]
+          if campaign_heaviness[campaign_id0] and not campaign_heaviness[campaign_id1]
             campaign_id_heavy = campaign_id0
             campaign_id_light = campaign_id1
           else 
             campaign_id_heavy = campaign_id1
             campaign_id_light = campaign_id0
           end
+          # TODO else elsif if both heavy or both light
           rates[campaign_id_heavy] = percentage.to_i
           rates[campaign_id_light] = 100 - percentage.to_i
         end
-      else
-        #selected_campaigns = new_campaigns.select{ |id| taps[id].open? and not campaigns_blacklist[id] }
-        p "I am a new campaign"
-        selected_campaigns = new_campaigns.select{ |id, status| !campaigns_blacklist[id] }.keys
-        campaign_id = selected_campaigns[0]
-        rates[campaign_id] = 100
-        campaign_loads[campaign_id] = -rate
-      end
+      # else
+      #   #selected_campaigns = new_campaigns.select{ |id| taps[id].open? and not campaigns_blacklist[id] }
+      #   p "I am a new campaign"
+      #   selected_campaigns = new_campaigns.select{ |id, status| !campaigns_blacklist[id] }.keys
+      #   campaign_id = selected_campaigns[0]
+      #   rates[campaign_id] = 100
+      #   # campaign_loads[campaign_id] = -rate
+      # end
       counts={}
       # get the 2 campaigns with lowest id that are open and not blacklisted
       p rates

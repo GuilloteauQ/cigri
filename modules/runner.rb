@@ -13,6 +13,10 @@ config = Cigri.conf
 logfile=config.get('LOG_FILE',"STDOUT")
 logger = Cigri::Logger.new("RUNNER #{ARGV[0]}", logfile)
 
+strlogfile = "/tmp/log.txt"
+
+file = File.new(strlogfile, File::CREAT|File::TRUNC|File::RDWR, 0777)
+
 RUNNER_TAP_INCREASE_FACTOR=CONF.get('RUNNER_TAP_INCREASE_FACTOR',"1.5").to_f
 
 if logfile != "STDOUT" && logfile != "STDERR"
@@ -47,12 +51,29 @@ def notify_judas
   Process.kill("USR1",Process.ppid)
 end
 
-def p_controller(current_percentage, reference, cluster)
+def p_controller(current_percentage, error)
   kp = 2
-  error = reference - cluster.get_global_stress_factor
-  new_percentage = current_percentage + kp * error
-  p new_percentage
-  return new_percentage
+  return current_percentage + kp * error
+end
+
+def pi_controller(current_percentage, error, cumulated_error)
+  kp = 2
+  ki = 0.01
+  return current_percentage + kp * error + ki * cumulated_error
+end
+
+def compute_error(reference, cluster)
+  return reference - cluster.get_global_stress_factor
+end
+
+def bound_percentage(percentage)
+  if percentage > 100
+    return 100
+  end
+  if percentage < 0
+    return 0
+  end
+  return percentage
 end
 
 
@@ -62,6 +83,7 @@ tap_can_be_opened={}
 campaign_loads = {}
 percentage = 50
 reference_stress_factor = 2
+cumulated_error = 0
 while true do
 
   logger.debug('New iteration')
@@ -266,8 +288,23 @@ while true do
     jobs.remove_blacklisted(cluster.id)
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
     #if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps) > 0 # if the tap is open
+    cluster_jobs = cluster.get_jobs()
+    p cluster_jobs
     p campaign_loads
-    percentage = p_controller(percentage, reference_stress_factor, cluster)
+    running = cluster_jobs.select{ |j| j["state"]=="Running" }.length +
+                cluster_jobs.select{ |j| j["state"]=="Finishing" }.length +
+                cluster_jobs.select{ |j| j["state"]=="Launching" }.length
+
+    waiting =  cluster_jobs.select { |j| j["state"] == "Waiting" }.length
+    file = File.open(strlogfile, "a+")
+    file << "#{Time.now.to_i}, #{percentage}, #{cluster.get_global_stress_factor}, #{waiting}, #{running}\n"
+    file.close
+    #if campaign_loads.length > 1
+      error = compute_error(reference_stress_factor, cluster)
+      cumulated_error += error
+      # percentage = bound_percentage(p_controller(percentage, error))
+      percentage = bound_percentage(pi_controller(percentage, error, cumulated_error))
+    #end
     if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, 10, campaign_loads, percentage) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
