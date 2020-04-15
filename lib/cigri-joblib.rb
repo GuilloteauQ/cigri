@@ -647,7 +647,6 @@ module Cigri
       campaigns.each {|c| running_campaigns[c.id]=true }
       campaign_heaviness = {}
       #campaigns.each {|c| campaign_heaviness[c.id]=c.heaviness }
-      pp cluster
       campaigns.each do |c|
         json = JSON.parse(c.props[:jdl])
         campaign_heaviness[c.id] = json["clusters"][cluster.name]["heaviness"]

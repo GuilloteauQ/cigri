@@ -58,7 +58,7 @@ end
 
 def pi_controller(current_percentage, error, cumulated_error)
   kp = 2
-  ki = 0.01
+  ki = 0
   return current_percentage + kp * error + ki * cumulated_error
 end
 
@@ -82,8 +82,11 @@ logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
 campaign_loads = {}
 percentage = 50
-reference_stress_factor = 2
+reference_stress_factor = 3
 cumulated_error = 0
+delay = 2
+delay_index = 0
+saved_errors = Array.new(delay, 0)
 while true do
 
   logger.debug('New iteration')
@@ -289,8 +292,6 @@ while true do
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
     #if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps) > 0 # if the tap is open
     cluster_jobs = cluster.get_jobs()
-    p cluster_jobs
-    p campaign_loads
     running = cluster_jobs.select{ |j| j["state"]=="Running" }.length +
                 cluster_jobs.select{ |j| j["state"]=="Finishing" }.length +
                 cluster_jobs.select{ |j| j["state"]=="Launching" }.length
@@ -301,9 +302,12 @@ while true do
     file.close
     #if campaign_loads.length > 1
       error = compute_error(reference_stress_factor, cluster)
+      saved_errors[delay_index] = error
       cumulated_error += error
       # percentage = bound_percentage(p_controller(percentage, error))
-      percentage = bound_percentage(pi_controller(percentage, error, cumulated_error))
+      #percentage = bound_percentage(pi_controller(percentage, error, cumulated_error))
+      delay_index = (delay_index + 1) % delay
+      percentage = bound_percentage(pi_controller(percentage, saved_errors[delay_index], cumulated_error))
     #end
     if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, 10, campaign_loads, percentage) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
