@@ -51,9 +51,22 @@ def notify_judas
   Process.kill("USR1",Process.ppid)
 end
 
-def p_controller(current_percentage, error)
+def ctrl(ref, queue_load, kp, ki, memoire)
+    epsilon = ref - queue_load
+    somme = memoire + epsilon
+    pk = kp * epsilon
+    ik = ki * 6.8716 * somme
+    result = pk + ik
+    return result, somme
+end
+
+def p_controller_2(current_percentage, error)
   kp = 2
   return current_percentage + kp * error
+end
+
+def p_controller(error, kp)
+  return error * kp
 end
 
 def pi_controller(current_percentage, error, cumulated_error)
@@ -64,6 +77,13 @@ end
 
 def compute_error(reference, cluster)
   return reference - cluster.get_global_stress_factor
+end
+
+def bound_nb_jobs(nb_jobs)
+  if nb_jobs < 0
+    return 0
+  end
+  return nb_jobs
 end
 
 def bound_percentage(percentage)
@@ -84,9 +104,13 @@ campaign_loads = {}
 percentage = 50
 reference_stress_factor = 3
 cumulated_error = 0
-delay = 2
+delay = 1
 delay_index = 0
 saved_errors = Array.new(delay, 0)
+reference_queue = 50
+integrale = 0
+nb_allow_jobs = 10
+previous_waiting = 100
 while true do
 
   logger.debug('New iteration')
@@ -298,18 +322,32 @@ while true do
 
     waiting =  cluster_jobs.select { |j| j["state"] == "Waiting" }.length
     file = File.open(strlogfile, "a+")
-    file << "#{Time.now.to_i}, #{percentage}, #{cluster.get_global_stress_factor}, #{waiting}, #{running}\n"
+    file << "#{Time.now.to_i}, #{percentage}, #{nb_allow_jobs}, #{cluster.get_global_stress_factor}\n"
     file.close
-    #if campaign_loads.length > 1
-      error = compute_error(reference_stress_factor, cluster)
-      saved_errors[delay_index] = error
-      cumulated_error += error
-      # percentage = bound_percentage(p_controller(percentage, error))
+    cluster_load = cluster.get_global_stress_factor
+    error_load = compute_error(reference_stress_factor, cluster)
+    saved_errors[delay_index] = error_load
+    delay_index = (delay_index + 1) % delay
+    b = previous_waiting - waiting + nb_allow_jobs
+    b = 10
+    previous_waiting = waiting
+    if (saved_errors[delay_index] * b / cluster_load).abs() >= 1
+      # controle = jobs.ctrl(reference_queue, waiting, 0.22, 0.06, integrale)
+      #controle = ctrl(reference_queue, waiting, 0.22, 0.06, integrale)
+      #integrale=controle[1]
+      #nb_allow_jobs=controle[0]
+      # nb_allow_jobs = nb_allow_jobs + (error_load * b / cluster_load).to_i
+      # nb_allow_jobs = bound_nb_jobs(nb_allow_jobs + p_controller(error_load, b / cluster_load))
+      nb_allow_jobs = bound_nb_jobs(nb_allow_jobs + p_controller(saved_errors[delay_index], (nb_allow_jobs + 1)/ reference_stress_factor))
+    else
+      cumulated_error += error_load
+      #percentage = bound_percentage(p_controller(percentage, error))
       #percentage = bound_percentage(pi_controller(percentage, error, cumulated_error))
-      delay_index = (delay_index + 1) % delay
-      percentage = bound_percentage(pi_controller(percentage, saved_errors[delay_index], cumulated_error))
+      # percentage = bound_percentage(pi_controller(percentage, saved_errors[delay_index], cumulated_error))
+      percentage = bound_percentage(percentage + p_controller(saved_errors[delay_index], (nb_allow_jobs + 1) / reference_stress_factor ))
+    end
     #end
-    if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, 10, campaign_loads, percentage) > 0 # if the tap is open
+    if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, nb_allow_jobs, campaign_loads, percentage) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
