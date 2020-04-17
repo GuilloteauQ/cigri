@@ -54,6 +54,7 @@ end
 #Main runner loop
 logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
+action_job_ids = []
 while true do
   loop_time = Time.now
   logger.debug('New iteration')
@@ -67,12 +68,40 @@ while true do
   cluster_jobs=cluster.get_jobs()
   
   # Read the value
-  r_sampled = cluster_jobs.select{ |j| j["state"]=="Running" }.length +
-              cluster_jobs.select{ |j| j["state"]=="Finishing" }.length +
-              cluster_jobs.select{ |j| j["state"]=="Launching" }.length
-  
-  export2file("Waiting",cluster_jobs.select{ |j| j["state"]=="Waiting" }.length,ARGV[0],strlogfile, loop_time)
-  export2file("Running",r_sampled,ARGV[0],strlogfile, loop_time)
+  running_job_ids = cluster_jobs.select{ |j| j["state"] == "Running" or j["state"] == "Finishing" or j["state"] == "Launching" }.collect{ |j| j["id"].to_i }
+  waiting_job_ids = cluster_jobs.select{ |j| j["state"] == "Waiting" }.collect{ |j| j["id"].to_i }
+
+  file = File.open(strlogfile, "a+")
+  # Writing Action jobs
+  action_job_ids.each do |id|
+    if not waiting_job_ids.include? id
+      file <<  "#{loop_time.to_f}, #{id}, A\n"
+    else
+      file <<  "#{loop_time.to_f}, #{id}, N\n"
+    end
+  end
+
+  # Writing Waiting jobs
+  waiting_job_ids.each do |id|
+    if not action_job_ids.include? id
+      file <<  "#{loop_time.to_f}, #{id}, W\n"
+    end
+  end
+
+  # Writing Running jobs
+  running_job_ids.each do |id|
+    file <<  "#{loop_time.to_f}, #{id}, R\n"
+  end
+  file.close
+
+  #r_sampled = cluster_jobs.select{ |j| j["state"]=="Running" }.length +
+  #            cluster_jobs.select{ |j| j["state"]=="Finishing" }.length +
+  #            cluster_jobs.select{ |j| j["state"]=="Launching" }.length
+  #
+  #export2file("Waiting",cluster_jobs.select{ |j| j["state"]=="Waiting" }.length,ARGV[0],strlogfile, loop_time)
+  #export2file("Running",r_sampled,ARGV[0],strlogfile, loop_time)
+  #export2file("Action",tolaunch_jobs.length,ARGV[0],strlogfile, loop_time)
+
   
   # init taps
   cluster.reset_taps
@@ -270,11 +299,18 @@ while true do
     logger.warn("Integrale #{integrale}")
     if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps,nb_allow_jobs) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
-      export2file("Action",tolaunch_jobs.length,ARGV[0],strlogfile, loop_time)
+      action = tolaunch_jobs.length
+      #p tolaunch_jobs.records[0].props
+      action_job_ids = tolaunch_jobs.records.collect{ |r| r.props[:id].to_i }
+      # action_job_ids = tolaunch_jobs.props[:ids.collect{ |j| j.id }
+      #
+      # export2file("Action",tolaunch_jobs.length,ARGV[0],strlogfile, loop_time)
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
       # Remove jobs from blacklisted campaigns
       jobs.remove_blacklisted(cluster.id) if jobs != false
+    else
+      action_job_ids = []
     end
     if jobs!= false and jobs.length > 0
       # Submit the new jobs
