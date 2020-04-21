@@ -46,6 +46,7 @@ if config.exists?('RUNNER_MIN_CYCLE_DURATION')
 else
   MIN_CYCLE_DURATION = 5
 end
+MIN_CYCLE_DURATION = 5
 
 def notify_judas
   Process.kill("USR1",Process.ppid)
@@ -109,8 +110,14 @@ delay_index = 0
 saved_errors = Array.new(delay, 0)
 reference_queue = 50
 integrale = 0
-nb_allow_jobs = 10
+nb_allow_jobs = 0
 previous_waiting = 100
+
+k_p_nb_jobs =  0.5
+k_p_percentage = 10
+
+has_running_campaigns = false
+
 while true do
 
   logger.debug('New iteration')
@@ -321,6 +328,8 @@ while true do
                 cluster_jobs.select{ |j| j["state"]=="Launching" }.length
 
     waiting =  cluster_jobs.select { |j| j["state"] == "Waiting" }.length
+
+    has_running_campaigns = (has_running_campaigns or running + waiting > 0)
     file = File.open(strlogfile, "a+")
     file << "#{Time.now.to_i}, #{percentage}, #{nb_allow_jobs}, #{cluster.get_global_stress_factor}\n"
     file.close
@@ -329,24 +338,22 @@ while true do
     saved_errors[delay_index] = error_load
     delay_index = (delay_index + 1) % delay
     b = previous_waiting - waiting + nb_allow_jobs
-    b = 10
     previous_waiting = waiting
-    if (saved_errors[delay_index] * b / cluster_load).abs() >= 1
-      # controle = jobs.ctrl(reference_queue, waiting, 0.22, 0.06, integrale)
-      #controle = ctrl(reference_queue, waiting, 0.22, 0.06, integrale)
-      #integrale=controle[1]
-      #nb_allow_jobs=controle[0]
-      # nb_allow_jobs = nb_allow_jobs + (error_load * b / cluster_load).to_i
-      # nb_allow_jobs = bound_nb_jobs(nb_allow_jobs + p_controller(error_load, b / cluster_load))
-      nb_allow_jobs = bound_nb_jobs(nb_allow_jobs + p_controller(saved_errors[delay_index], (nb_allow_jobs + 1)/ reference_stress_factor))
-    else
-      cumulated_error += error_load
-      #percentage = bound_percentage(p_controller(percentage, error))
-      #percentage = bound_percentage(pi_controller(percentage, error, cumulated_error))
-      # percentage = bound_percentage(pi_controller(percentage, saved_errors[delay_index], cumulated_error))
-      percentage = bound_percentage(percentage + p_controller(saved_errors[delay_index], (nb_allow_jobs + 1) / reference_stress_factor ))
+    if has_running_campaigns
+      # We do not want to change the number of jobs sent or the percentage
+      # only based on the load of the cluster when no campaign is running
+      if (saved_errors[delay_index]).abs() >= 1 #controle = ctrl(reference_queue, waiting, 0.22, 0.06, integrale)
+        #integrale=controle[1]
+        #nb_allow_jobs=controle[0]
+        nb_allow_jobs = bound_nb_jobs(nb_allow_jobs + p_controller(saved_errors[delay_index], k_p_nb_jobs))
+      elsif nb_allow_jobs > 0
+        # If we change the percentage when there is no job, this means
+        # that we are regulating the load of an empty cluster...
+        # So we make sure this does not happen
+        cumulated_error += error_load
+        percentage = bound_percentage(percentage + p_controller(saved_errors[delay_index], k_p_percentage))
+      end
     end
-    #end
     if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, nb_allow_jobs, campaign_loads, percentage) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
