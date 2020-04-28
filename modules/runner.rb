@@ -8,6 +8,7 @@ require 'cigri-joblib'
 require 'cigri-eventlib'
 require 'cigri-colombolib'
 require 'cigri-runnerlib'
+require 'cigri-control'
 
 config = Cigri.conf
 logfile=config.get('LOG_FILE',"STDOUT")
@@ -52,71 +53,26 @@ def notify_judas
   Process.kill("USR1",Process.ppid)
 end
 
-def ctrl(ref, queue_load, kp, ki, memoire)
-    epsilon = ref - queue_load
-    somme = memoire + epsilon
-    pk = kp * epsilon
-    ik = ki * 6.8716 * somme
-    result = pk + ik
-    return result, somme
-end
-
-def p_controller_2(current_percentage, error)
-  kp = 2
-  return current_percentage + kp * error
-end
-
-def p_controller(error, kp)
-  return error * kp
-end
-
-def pi_controller(current_percentage, error, cumulated_error)
-  kp = 2
-  ki = 0
-  return current_percentage + kp * error + ki * cumulated_error
-end
-
-def compute_error(reference, cluster)
-  return reference - cluster.get_global_stress_factor
-end
-
-def bound_nb_jobs(nb_jobs)
-  if nb_jobs < 0
-    return 0
-  end
-  return nb_jobs
-end
-
-def bound_percentage(percentage)
-  if percentage > 100
-    return 100
-  end
-  if percentage < 0
-    return 0
-  end
-  return percentage
-end
-
 
 #Main runner loop
 logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
-campaign_loads = {}
-percentage = 50
 reference_stress_factor = 3
 cumulated_error = 0
 delay = 1
 delay_index = 0
 saved_errors = Array.new(delay, 0)
 reference_queue = 50
-integrale = 0
-nb_allow_jobs = 0
 previous_waiting = 100
 
-k_p_nb_jobs =  0.5
-k_p_percentage = 10
+kp_nb_jobs =  0.5
+kp_percentage = 10
+percentage = 50
+nb_allow_jobs = 0
 
 has_running_campaigns = false
+
+nb_jobs_and_percentage = JobsAndPercentageCtrl.new(nb_allow_jobs, percentage, kp_nb_jobs, kp_percentage)
 
 while true do
 
@@ -219,9 +175,6 @@ while true do
                 have_to_notify = true
               else
                 job.update({'state' => 'terminated','stop_time' => to_sql_timestamp(stop_time)})
-                if !campaign_loads[campaign_id].nil? and campaign_loads[campaign_id] < 0
-                  campaign_loads[campaign_id] = stress_factor / (- campaign_loads[campaign_id])
-                end
               end
             when /Error/i
               logger.info("Job #{job.id} is in Error state.")
@@ -330,31 +283,23 @@ while true do
     waiting =  cluster_jobs.select { |j| j["state"] == "Waiting" }.length
 
     has_running_campaigns = (has_running_campaigns or running + waiting > 0)
-    file = File.open(strlogfile, "a+")
-    file << "#{Time.now.to_i}, #{percentage}, #{nb_allow_jobs}, #{cluster.get_global_stress_factor}\n"
-    file.close
+
     cluster_load = cluster.get_global_stress_factor
-    error_load = compute_error(reference_stress_factor, cluster)
+    error_load = reference_stress_factor - cluster_load
     saved_errors[delay_index] = error_load
     delay_index = (delay_index + 1) % delay
-    b = previous_waiting - waiting + nb_allow_jobs
-    previous_waiting = waiting
+    
+    file = File.open(strlogfile, "a+")
+    file << "#{Time.now.to_i}, #{percentage}, #{nb_allow_jobs}, #{cluster_load}\n"
+    file.close
+
     if has_running_campaigns
-      # We do not want to change the number of jobs sent or the percentage
-      # only based on the load of the cluster when no campaign is running
-      if (saved_errors[delay_index]).abs() >= 1 #controle = ctrl(reference_queue, waiting, 0.22, 0.06, integrale)
-        #integrale=controle[1]
-        #nb_allow_jobs=controle[0]
-        nb_allow_jobs = bound_nb_jobs(nb_allow_jobs + p_controller(saved_errors[delay_index], k_p_nb_jobs))
-      elsif nb_allow_jobs > 0
-        # If we change the percentage when there is no job, this means
-        # that we are regulating the load of an empty cluster...
-        # So we make sure this does not happen
-        cumulated_error += error_load
-        percentage = bound_percentage(percentage + p_controller(saved_errors[delay_index], k_p_percentage))
-      end
+      nb_jobs_and_percentage.update(saved_errors[delay_index])
+      # (nb_allow_jobs, percentage) = get_nb_allow_job_percentage(saved_errors[delay_index], nb_allow_jobs, percentage, kp_nb_jobs, kp_percentage)
     end
-    if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, nb_allow_jobs, campaign_loads, percentage) > 0 # if the tap is open
+    nb_allow_jobs = nb_jobs_and_percentage.get_nb_jobs
+    percentage    = nb_jobs_and_percentage.get_percentage
+    if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, nb_allow_jobs, percentage) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
