@@ -68,7 +68,7 @@ while true do
   cluster_jobs=cluster.get_jobs()
 
   waiting_job_ids = cluster_jobs.select{ |j| j["state"]=="Waiting" }.collect{ |j| j["id"].to_i }
-  running_job_ids = cluster_jobs.select{ |j| j["state"] == "Running" or j["state"]=="Finishing" or cluster_jobs.select{ |j| j["state"]=="Launching" }.collect{ |j| j["id"].to_i }
+  running_job_ids = cluster_jobs.select{ |j| j["state"] == "Running" or j["state"]=="Finishing" or j["state"]=="Launching" }.collect{ |j| j["id"].to_i }
 
   write_data_for_heatmap(strlogfile, loop_time, action_job_ids, waiting_job_ids, running_job_ids)
 
