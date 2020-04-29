@@ -53,7 +53,9 @@ end
 #Main runner loop
 logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
+action_job_ids = []
 while true do
+  loop_time = Time.now
 
   logger.debug('New iteration')
 
@@ -64,14 +66,19 @@ while true do
   current_jobs.to_jobs
   
   cluster_jobs=cluster.get_jobs()
-  
+
+  waiting_job_ids = cluster_jobs.select{ |j| j["state"]=="Waiting" }.collect{ |j| j["id"].to_i }
+  running_job_ids = cluster_jobs.select{ |j| j["state"] == "Running" or j["state"]=="Finishing" or cluster_jobs.select{ |j| j["state"]=="Launching" }.collect{ |j| j["id"].to_i }
+
+  write_data_for_heatmap(strlogfile, loop_time, action_job_ids, waiting_job_ids, running_job_ids)
+
   # Read the value
-  r_sampled = cluster_jobs.select{ |j| j["state"]=="Running" }.length +
-              cluster_jobs.select{ |j| j["state"]=="Finishing" }.length +
-              cluster_jobs.select{ |j| j["state"]=="Launching" }.length
-  
-  export2file("Waiting",cluster_jobs.select{ |j| j["state"]=="Waiting" }.length,ARGV[0])
-  export2file("Running",r_sampled,ARGV[0])
+  # r_sampled = cluster_jobs.select{ |j| j["state"]=="Running" }.length +
+  #             cluster_jobs.select{ |j| j["state"]=="Finishing" }.length +
+  #             cluster_jobs.select{ |j| j["state"]=="Launching" }.length
+  # 
+  # export2file("Waiting",cluster_jobs.select{ |j| j["state"]=="Waiting" }.length,ARGV[0])
+  # export2file("Running",r_sampled,ARGV[0])
 
   # init taps
   cluster.reset_taps
@@ -261,14 +268,17 @@ while true do
     jobs=Cigri::Jobset.new(:where => "jobs.state='to_launch' and jobs.cluster_id=#{cluster.id}")
     jobs.remove_blacklisted(cluster.id)
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
-    export2file("Action",tolaunch_jobs.length,ARGV[0])
+    # export2file("Action",tolaunch_jobs.length,ARGV[0])
     if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
+      action_job_ids = tolaunch_jobs.records.collect{ |r| r.props[:id].to_i }
       #export2file("Action",tolaunch_jobs.length,ARGV[0])
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
       # Remove jobs from blacklisted campaigns
       jobs.remove_blacklisted(cluster.id) if jobs != false
+    else
+      action_job_ids = []
     end
     if jobs!= false and jobs.length > 0
       # Submit the new jobs
