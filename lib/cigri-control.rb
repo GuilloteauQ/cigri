@@ -77,3 +77,28 @@ def costfit(q,r,f,p,kin,rmax,q_ref,r_ref,f_ref,dt,overload)
     return u
 
 end
+
+def write_data_for_heatmap(filename, loop_time, action_job_ids, waiting_job_ids, running_job_ids)
+  file = File.open(filename, "a+")
+  # Writing Action jobs
+  action_job_ids.each do |id|
+    if not waiting_job_ids.include? id
+      file <<  "#{loop_time.to_f}, #{id}, A\n"
+    else
+      file <<  "#{loop_time.to_f}, #{id}, N\n"
+    end
+  end
+
+  # Writing Waiting jobs
+  waiting_job_ids.each do |id|
+    if not action_job_ids.include? id
+      file <<  "#{loop_time.to_f}, #{id}, W\n"
+    end
+  end
+
+  # Writing Running jobs
+  running_job_ids.each do |id|
+    file <<  "#{loop_time.to_f}, #{id}, R\n"
+  end
+  file.close
+end
