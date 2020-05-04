@@ -74,7 +74,7 @@ while true do
   waiting = cluster_jobs.select{ |j| j["state"]=="Waiting" }.length
 
   file = File.open(strlogfile, "a+")
-  file << "#{loop_time.to_f},#{action},#{waiting},#{running}\n"
+  file << "#{loop_time.to_f},#{action},#{waiting},#{running},#{cluster.get_global_stress_factor()}\n"
   file.close
 
   # init taps
