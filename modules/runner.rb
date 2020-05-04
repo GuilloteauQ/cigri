@@ -45,6 +45,7 @@ if config.exists?('RUNNER_MIN_CYCLE_DURATION')
 else
   MIN_CYCLE_DURATION = 5
 end
+MIN_CYCLE_DURATION = 5
 
 def notify_judas
   Process.kill("USR1",Process.ppid)
