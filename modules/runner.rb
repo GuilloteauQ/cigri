@@ -53,7 +53,9 @@ end
 #Main runner loop
 logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
+action = 0
 while true do
+  loop_time = Time.now
 
   logger.debug('New iteration')
 
@@ -66,12 +68,14 @@ while true do
   cluster_jobs=cluster.get_jobs()
   
   # Read the value
-  r_sampled = cluster_jobs.select{ |j| j["state"]=="Running" }.length +
-              cluster_jobs.select{ |j| j["state"]=="Finishing" }.length +
-              cluster_jobs.select{ |j| j["state"]=="Launching" }.length
-  
-  export2file("Waiting",cluster_jobs.select{ |j| j["state"]=="Waiting" }.length,ARGV[0])
-  export2file("Running",r_sampled,ARGV[0])
+  running = cluster_jobs.select{ |j| j["state"]=="Running" }.length +
+            cluster_jobs.select{ |j| j["state"]=="Finishing" }.length +
+            cluster_jobs.select{ |j| j["state"]=="Launching" }.length
+  waiting = cluster_jobs.select{ |j| j["state"]=="Waiting" }.length
+
+  file = File.open(strlogfile, "a+")
+  file << "#{loop_time.to_f},#{action},#{waiting},#{running}\n"
+  file.close
 
   # init taps
   cluster.reset_taps
@@ -261,7 +265,8 @@ while true do
     jobs=Cigri::Jobset.new(:where => "jobs.state='to_launch' and jobs.cluster_id=#{cluster.id}")
     jobs.remove_blacklisted(cluster.id)
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
-    export2file("Action",tolaunch_jobs.length,ARGV[0])
+    # export2file("Action",tolaunch_jobs.length,ARGV[0])
+    action = tolaunch_jobs.length
     if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       #export2file("Action",tolaunch_jobs.length,ARGV[0])
