@@ -88,6 +88,9 @@ H = Matrix[[1, 0, 0, 0, 0, 0],
                          
 rv = Array.new; rv.push 100
 
+memory_b = Array.new
+action = 0
+
 #Main runner loop
 logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
@@ -307,10 +310,14 @@ while true do
     end
     rmax_est = rv.max + 10
     i += 1
+
+    file = File.open(strlogfile, "a+")
+    file << "#{loop_time.to_f},#{action},#{q_sampled},#{r_sampled},#{f}\n"
+    file.close
   
-    export2file("Waiting",q_sampled,ARGV[0],strlogfile,loop_time)
-    export2file("Running",r_sampled,ARGV[0],strlogfile,loop_time)
-    export2file("Stress",f,ARGV[0],strlogfile,loop_time)
+    # export2file("Waiting",q_sampled,ARGV[0],strlogfile,loop_time)
+    # export2file("Running",r_sampled,ARGV[0],strlogfile,loop_time)
+    # export2file("Stress",f,ARGV[0],strlogfile,loop_time)
     
     logger.debug("Jobs submissions")
     tolaunch_jobs = Cigri::JobtolaunchSet.new
@@ -325,11 +332,11 @@ while true do
 	P = (Matrix.identity((K*H).row_count) - K*H)*P
 
 	# Export x_est y r
-	export2file("x_est",x_est[0,0],ARGV[0],strlogfile,loop_time)
-	export2file("r_est",x_est[1,0],ARGV[0],strlogfile,loop_time)
-	export2file("kin",x_est[5,0],ARGV[0],strlogfile,loop_time)
-	export2file("p",x_est[2,0],ARGV[0],strlogfile,loop_time)
-	export2file("f",x_est[5,0],ARGV[0],strlogfile,loop_time)
+	# export2file("x_est",x_est[0,0],ARGV[0],strlogfile,loop_time)
+	# export2file("r_est",x_est[1,0],ARGV[0],strlogfile,loop_time)
+	# export2file("kin",x_est[5,0],ARGV[0],strlogfile,loop_time)
+	# export2file("p",x_est[2,0],ARGV[0],strlogfile,loop_time)
+	# export2file("f",x_est[5,0],ARGV[0],strlogfile,loop_time)
 	
 	overload = false
 	#overload = (i>160)
@@ -338,8 +345,8 @@ while true do
 	# Compute u
 	# I changed this to try something, please put it back
 	# nb_allow_jobs = costfit(x_est[0,0],x_est[1,0],x_est[2,0],rmax_est,q_ref,r_ref,dt,overload)
-	nb_allow_jobs = costfit(q_sampled,r_sampled,f,x_est[2,0],x_est[5,0],rmax_est,q_ref,r_ref,f_ref,dt,overload)
-	export2file("Running_max",rmax_est,ARGV[0],strlogfile,loop_time)
+	nb_allow_jobs = costfit(q_sampled,r_sampled,f,x_est[2,0],x_est[5,0],rmax_est,q_ref,r_ref,f_ref,dt,overload, memory_b)
+	# export2file("Running_max",rmax_est,ARGV[0],strlogfile,loop_time)
 	logger.warn("Nombre jobs allow : #{nb_allow_jobs}")
 	logger.warn("i : #{i}")
 	u = 0
@@ -350,13 +357,16 @@ while true do
     if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps, nb_allow_jobs) > 0 # if the tap is open
     
 	  # Export action
-      export2file("Action",nb_allow_jobs,ARGV[0],strlogfile,loop_time)
+      # export2file("Action",nb_allow_jobs,ARGV[0],strlogfile,loop_time)
+      action = nb_allow_jobs
     
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
       # Remove jobs from blacklisted campaigns
       jobs.remove_blacklisted(cluster.id) if jobs != false
+    else
+      action = 0
     end
     if jobs!= false and jobs.length > 0
       # Submit the new jobs
@@ -433,7 +443,7 @@ while true do
 	
 	# Predict future value
 	x_est = *x_est
-	x_est[0][0],x_est[1][0],x_est[4][0] = cigri_model(x_est[0][0],x_est[1][0],x_est[4][0],x_est[2][0],x_est[5][0],rmax_est,u,dt)
+	x_est[0][0],x_est[1][0],x_est[4][0] = cigri_model(x_est[0][0],x_est[1][0],x_est[4][0],x_est[2][0],x_est[5][0],rmax_est,u,dt, memory_b)
 	x_est[3][0] = b(x_est[0][0],x_est[1][0],rmax_est)
 	x_est = Matrix[*x_est]
 	
