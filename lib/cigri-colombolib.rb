@@ -185,7 +185,7 @@ module Cigri
         resubmit=true
         type="Special_exit_status_67"
       # Get the type of oar error
-      else
+      elsif (!cluster_job["events"].nil?)
         cluster_job["events"].each do |remote_event|
           type=remote_event["type"] 
           # Automatic resubmit when the job was killed
