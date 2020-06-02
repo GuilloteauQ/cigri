@@ -604,7 +604,6 @@ module Cigri
         if not taps[campaign_id].nil?
           rate=taps[campaign_id].props[:rate].to_i
         end
-        rate = 1000
         # If the tap is closed since a short time, dont' send jobs
         # to the runner. It causes the runner to wait a bit for jobs to start.
         if not taps[campaign_id].open? and 

@@ -45,7 +45,7 @@ if config.exists?('RUNNER_MIN_CYCLE_DURATION')
 else
   MIN_CYCLE_DURATION = 5
 end
-MIN_CYCLE_DURATION = 5
+MIN_CYCLE_DURATION = 30
 
 def notify_judas
   Process.kill("USR1",Process.ppid)
@@ -267,14 +267,16 @@ while true do
     jobs.remove_blacklisted(cluster.id)
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
     # export2file("Action",tolaunch_jobs.length,ARGV[0])
-    action = tolaunch_jobs.length
     if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       #export2file("Action",tolaunch_jobs.length,ARGV[0])
       # Take the jobs from the b-o-t
+      action = tolaunch_jobs.length
       jobs = tolaunch_jobs.take
       # Remove jobs from blacklisted campaigns
       jobs.remove_blacklisted(cluster.id) if jobs != false
+    else
+      action = 0
     end
     if jobs!= false and jobs.length > 0
       # Submit the new jobs
