@@ -8,6 +8,7 @@ require 'cigri-joblib'
 require 'cigri-eventlib'
 require 'cigri-colombolib'
 require 'cigri-runnerlib'
+require 'cigri-control'
 
 config = Cigri.conf
 logfile=config.get('LOG_FILE',"STDOUT")
@@ -50,6 +51,10 @@ end
 #Main runner loop
 logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
+
+# Define the controller object
+controller = Controller.new("/tmp/log.txt", cluster)
+
 while true do
 
   logger.debug('New iteration')
@@ -63,6 +68,7 @@ while true do
   # init taps
   cluster.reset_taps
   (current_jobs.campaigns + cluster.running_campaigns).uniq.each do |campaign_id|
+
     tap=Cigri::Tap.new(:cluster_id => cluster.id, :campaign_id => campaign_id)
     if not tap_can_be_opened[tap.id]
       tap.decrease
@@ -190,8 +196,9 @@ while true do
             when /Waiting/i
               job.update({'state' => 'remote_waiting'})
               # close the tap
-              cluster.taps[campaign_id].close
-              tap_can_be_opened[cluster.taps[campaign_id].id]=false
+              # NOT REQUIRED AS WE WANT TO HAVE CONTROL ON THE TAPS
+              # cluster.taps[campaign_id].close
+              # tap_can_be_opened[cluster.taps[campaign_id].id]=false
             else
               # close the tap
               cluster.taps[campaign_id].close
