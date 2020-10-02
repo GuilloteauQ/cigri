@@ -13,22 +13,25 @@ class Controller
     @nb_jobs = config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
     @reference = config_data["reference"].nil? ? 10 : config_data["reference"].to_i
 	@error = 0
+    @cumulated_error = 0
+    @kp = config_data["kp"].nil? ? 0 : config_data["kp"].to_f
+    @ki = config_data["ki"].nil? ? 0 : config_data["ki"].to_f
 	@logfile = logfile # TODO: May need to create the file if does not exist
 	@cluster = cluster
   end
 
   def update_controlled_value()
-	# TODO to set accordingly
-	@nb_jobs = @nb_jobs + 1 * @error
+	@nb_jobs = @nb_jobs + @kp * @error + @ki * @cumulated_error
   end
 
   def update_error(value)
 	@error = @reference - value
+    @cumulated_error = @cumulated_error + @error
   end
 
   def log()
 	file = File.open(@logfile, "a+")
-    file << "#{Time.now.to_i}, #{@nb_jobs}\n"
+    file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}\n"
     file.close
   end
 
