@@ -1,4 +1,5 @@
 {
     "nb_jobs": 10,
-    "reference": 10
+    "reference": 10,
+    "kp": 0.01
 }
