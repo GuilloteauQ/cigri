@@ -17,7 +17,7 @@ class Controller
 
   def update_controlled_value()
 	# TODO to set accordingly
-	@nb_jobs = 1 * @error
+	@nb_jobs = @nb_jobs + 1 * @error
   end
 
   def update_error(value)
@@ -32,12 +32,12 @@ class Controller
 
   def get_running_jobs()
 	cluster_jobs = @cluster.get_jobs()
-	cluster_jobs.select{j| j["state"] == "Running" or j["state"] == "Finishing" or j["state"] == "Launching"}
+	cluster_jobs.select{|j| j["state"] == "Running" or j["state"] == "Finishing" or j["state"] == "Launching"}
   end
 
   def get_waiting_jobs()
 	cluster_jobs = @cluster.get_jobs()
-	cluster_jobs.select{j| j["state"] == "Waiting"}
+	cluster_jobs.select{|j| j["state"] == "Waiting"}
   end
 
   def get_cluster_load()

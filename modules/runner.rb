@@ -254,8 +254,13 @@ while true do
     # Get the jobs in state to_launch (should only happen for prologue/epilogue or after  a crash)
     jobs=Cigri::Jobset.new(:where => "jobs.state='to_launch' and jobs.cluster_id=#{cluster.id}")
     jobs.remove_blacklisted(cluster.id)
+
+    controller.log()
+    controller.update_error(controller.get_waiting_jobs())
+    controller.update_controlled_value()
+
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
-    if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps) > 0 # if the tap is open
+    if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps, controller.get_nb_jobs()) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
