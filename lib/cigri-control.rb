@@ -1,4 +1,5 @@
 require 'cigri-clusterlib'
+require 'json'
 
 class Controller
   # We try to give a generic API for the controller
@@ -7,9 +8,10 @@ class Controller
   # It is possible to add others attributes:
   #   - the cumulated error
   #   - some constant matrices
-  def initialize(logfile, cluster)
-    @nb_jobs = 0
-	@reference = 10 # TODO To set accordingly
+  def initialize(logfile, cluster, config_file)
+    config_data = JSON.parse(File.read(config_file))
+    @nb_jobs = config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
+    @reference = config_data["reference"].nil? ? 10 : config_data["reference"].to_i
 	@error = 0
 	@logfile = logfile # TODO: May need to create the file if does not exist
 	@cluster = cluster
@@ -32,12 +34,12 @@ class Controller
 
   def get_running_jobs()
 	cluster_jobs = @cluster.get_jobs()
-	cluster_jobs.select{|j| j["state"] == "Running" or j["state"] == "Finishing" or j["state"] == "Launching"}
+    cluster_jobs.select{|j| j["state"] == "Running" or j["state"] == "Finishing" or j["state"] == "Launching"}.length
   end
 
   def get_waiting_jobs()
 	cluster_jobs = @cluster.get_jobs()
-	cluster_jobs.select{|j| j["state"] == "Waiting"}
+    cluster_jobs.select{|j| j["state"] == "Waiting"}.length
   end
 
   def get_cluster_load()
