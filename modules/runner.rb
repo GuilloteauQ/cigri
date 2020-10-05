@@ -53,7 +53,7 @@ logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
 
 # Define the controller object
-controller = Controller.new("/tmp/log.txt", cluster, config.get('CTRL_CIGRI_CONFIG_FILE'))#"/srv/cigri/ctrl_cigri_conf.json")
+controller = Controller.new("/tmp/log.txt", cluster, config.get('CTRL_CIGRI_CONFIG_FILE'), MIN_CYCLE_DURATION)#"/srv/cigri/ctrl_cigri_conf.json")
 
 while true do
 
@@ -256,7 +256,7 @@ while true do
     jobs.remove_blacklisted(cluster.id)
 
     controller.log()
-    controller.update_error(controller.get_waiting_jobs())
+    # controller.update_error(controller.get_waiting_jobs())
     controller.update_controlled_value()
 
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
@@ -269,6 +269,7 @@ while true do
     end
     if jobs!= false and jobs.length > 0
       # Submit the new jobs
+      controller.set_nb_of_actually_submitted_jobs()
       begin
         submitted_jobs=jobs.submit2(cluster.id)
       rescue Cigri::ClusterAPIConnectionError => e
@@ -333,7 +334,9 @@ while true do
         end
       end
     end
+    controller.update_covariance_matrix()
   end 
+
 
   # notify
   notify_judas if have_to_notify
