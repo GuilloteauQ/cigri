@@ -22,6 +22,7 @@ class Controller
     @nb_jobs = config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
 	@error = 0
 	@logfile = logfile # TODO: May need to create the file if does not exist
+    file = File.new(@logfile, File::CREAT|File::TRUNC|File::RDWR, 0777)
 	@cluster = cluster
     @x_est = Matrix[*config_data["x_est"]].transpose
     print(@x_est)
