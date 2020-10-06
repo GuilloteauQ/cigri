@@ -26,11 +26,10 @@ EXPE_TOOLS_COMMIT=$(git rev-parse --verify HEAD)
 ###############################################################################
 ## Setup the env
 source ~/env37/bin/activate
-cd ~/big-data-hpc-g5k-expe-tools
 
 ###############################################################################
 ## Deploy
-python oar_cigri_expe.py ${DEPLOY_CONFIG}
+python ~/big-data-hpc-g5k-expe-tools/examples/augu5te/oar_cigri_expe.py ${DEPLOY_CONFIG}
 
 
 ## Save the names of the nodes
@@ -45,7 +44,7 @@ ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "cp -r $HOME/cigri /usr/l
 # Copying the conf file
 ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "cp ${CIGRI_CONFIG} /etc/cigri/cigri.conf"
 # Path for the logs (not usefull as in the code: TODO make it in the conf)
-# ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "echo 'LOG_CTRL_FILE="$HOME/logs/log_$(time).txt" >> /etc/cigri/cigri.conf"
+ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "echo 'LOG_CTRL_FILE='/tmp/log.txt' >> /etc/cigri/cigri.conf"
 # Config for the controller
 ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "echo 'CTRL_CIGRI_CONFIG_FILE=\"${CTRLR_CONFIG}\" >> /etc/cigri/cigri.conf"
 
@@ -67,7 +66,7 @@ ssh ${CIGRI_SERVER} -o StrictHostKeyChecking=no "gridsub -f ${CAMPAIGN_FILE}"
 get_status() {
     ssh ${CIGRI_SERVER} -o StrictHostKeyChecking=no "gridstat -c 1 > /tmp/output_gridstat"
     scp -o StrictHostKeyChecking=no  ${CIGRI_SERVER}:/tmp/output_gridstat /tmp/output_gridstat
-    cat /tmp/output/gridstat | sed -n 's/State:*\([^ ]*\)/\1/p' | sed -e 's/^[ \t]*//' | sed -e 's/[ \t]*$//'
+    cat /tmp/output_gridstat | sed -n 's/State:*\([^ ]*\)/\1/p' | sed -e 's/^[ \t]*//' | sed -e 's/[ \t]*$//'
 }
 
 status=$( get_status )
