@@ -40,18 +40,18 @@ OAR_SERVER=$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[
 ###############################################################################
 ## Setup CiGri
 # Copying all the code
-ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "cp -r $HOME/cigri /usr/local/share/cigri"
+ssh root@${CIGRI_SERVER}  "cp -r $HOME/NIX/cigri /usr/local/share/cigri"
 # Copying the conf file
-ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "cp ${CIGRI_CONFIG} /etc/cigri/cigri.conf"
-# Path for the logs (not usefull as in the code: TODO make it in the conf)
-ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "echo 'LOG_CTRL_FILE='/tmp/log.txt' >> /etc/cigri/cigri.conf"
+ssh root@${CIGRI_SERVER}  "cp ${CIGRI_CONFIG} /etc/cigri/cigri.conf"
+# Path for the logs 
+ssh root@${CIGRI_SERVER}  "echo 'LOG_CTRL_FILE=\"/tmp/log.txt\"' >> /etc/cigri/cigri.conf"
 # Config for the controller
-ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "echo 'CTRL_CIGRI_CONFIG_FILE=\"${CTRLR_CONFIG}\" >> /etc/cigri/cigri.conf"
+ssh root@${CIGRI_SERVER}  "echo 'CTRL_CIGRI_CONFIG_FILE=\"${CTRLR_CONFIG}\"' >> /etc/cigri/cigri.conf"
 
 # Stopping CiGri
-ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "/etc/init.d/cigri force-stop"
+ssh root@${CIGRI_SERVER}  "/etc/init.d/cigri force-stop"
 # Restarting CiGri
-ssh -t root@${CIGRI_SERVER} -o StricHostKeyChecking=no "systemctl restart cigri"
+ssh root@${CIGRI_SERVER}  "systemctl restart cigri"
 
 ###############################################################################
 ## Submit a Campaign
