@@ -11,7 +11,8 @@ require 'cigri-runnerlib'
 require 'cigri-control'
 
 config = Cigri.conf
-logfile=config.get('LOG_FILE',"STDOUT")
+# logfile=config.get('LOG_FILE',"STDOUT")
+logfile=config.get('LOG_FILE',"/tmp/cigri.log")
 logger = Cigri::Logger.new("RUNNER #{ARGV[0]}", logfile)
 
 RUNNER_TAP_INCREASE_FACTOR=CONF.get('RUNNER_TAP_INCREASE_FACTOR',"1.5").to_f

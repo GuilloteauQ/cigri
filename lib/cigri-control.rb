@@ -20,11 +20,12 @@ class Controller
   def initialize(logfile, cluster, config_file, dt)
     config_data = JSON.parse(File.read(config_file))
     @nb_jobs = config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
-	@error = 0
-	@logfile = logfile # TODO: May need to create the file if does not exist
-    file = File.new(@logfile, File::CREAT|File::TRUNC|File::RDWR, 0777)
-	@cluster = cluster
-    @x_est = Matrix[*config_data["x_est"]].transpose
+    @error = 0
+    @logfile = logfile # TODO: May need to create the file if does not exist
+    # file = File.new(@logfile, File::CREAT|File::TRUNC|File::RDWR, 0777)
+    @cluster = cluster
+    print(config_data["x_est"])
+    @x_est = Matrix[config_data["x_est"]].transpose
     print(@x_est)
 
     @q_ref = config_data["q_ref"].nil? ? 0 : config_data["q_ref"].to_f
@@ -67,11 +68,13 @@ class Controller
     r_sampled = self.get_running_jobs()
     f = self.get_cluster_load()
 
-	ym = Matrix[[q_sampled],[r_sampled],[f]] - @H*@x_est
-    print(@H*@P*(@H.transpose))
-	k_matrix = @P*(@H.transpose)*(( Matrix.build((@H*@P*(@H.transpose)).row_count) {@R} + @H*@P*(@H.transpose) ).inverse)
-	@x_est = @x_est + (k_matrix*ym)
-	@P = (Matrix.identity((k_matrix*@H).row_count) - k_matrix*@H)*@P
+    print(@H)
+    print(@x_est)
+    ym = Matrix[[q_sampled],[r_sampled],[f]] - @H*@x_est
+print(@H*@P*(@H.transpose))
+    k_matrix = @P*(@H.transpose)*(( Matrix.build((@H*@P*(@H.transpose)).row_count) {@R} + @H*@P*(@H.transpose) ).inverse)
+    @x_est = @x_est + (k_matrix*ym)
+    @P = (Matrix.identity((k_matrix*@H).row_count) - k_matrix*@H)*@P
   end
 
   def update_covariance_matrix()

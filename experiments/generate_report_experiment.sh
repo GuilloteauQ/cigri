@@ -10,12 +10,11 @@ DEPLOY_CONFIG=$6
 
 CTRL_CIGRI_BRANCH=$7
 
-ORG_DOC=notebook_$(date +"%s").org
 
 generate_exec_file() {
     SLEEP_TIME=$1
     SIZE_OF_FILE=$2
-    if [[ ${SIZE_OF_FILE} -ne 0 ]]
+    if [[ ${SIZE_OF_FILE} -ne 0 ]]; then
         exec_file_content="$(cat <<EOF
 #!/bin/bash
 echo \$2 > \$1
@@ -23,7 +22,7 @@ sleep ${SLEEP_TIME}
 dd if=/dev/zero of=//mnt/nfs0/file-nfs-$1 bs=$3 count=1 oflag=direct
 EOF
 )"
-        else
+    else
         exec_file_content="$(cat <<EOF
 #!/bin/bash
 echo \$2 > \$1
@@ -37,7 +36,7 @@ EOF
 
 ###############################################################################
 ## Generate the Campaign
-if [[ ${SIZE_OF_FILE} -ne 0 ]]
+if [[ ${SIZE_OF_FILE} -ne 0 ]]; then
     CAMPAIGN_NAME="campaign_${NUMBER_OF_JOBS}j_${SLEEP_TIME}s_${SIZE_OF_FILE}M"
 else
     CAMPAIGN_NAME="campaign_${NUMBER_OF_JOBS}j_${SLEEP_TIME}s"
@@ -48,6 +47,23 @@ fi
 EXEC_FILE="$HOME/exec_file_${SLEEP_TIME}s_${SIZE_OF_FILE}M.sh"
 
 EXEC_FILE_CONTENT=$( generate_exec_file $SLEEP_TIME $SIZE_OF_FILE )
+
+if [[ ${SIZE_OF_FILE} -ne 0 ]]; then
+    EXEC_FILE_CONTENT="$(cat <<EOF
+#!/bin/bash
+echo \$2 > \$1
+sleep ${SLEEP_TIME}
+dd if=/dev/zero of=//mnt/nfs0/file-nfs-$1 bs=$3 count=1 oflag=direct
+EOF
+)"
+else
+    EXEC_FILE_CONTENT="$(cat <<EOF
+#!/bin/bash
+echo \$2 > \$1
+sleep ${SLEEP_TIME}
+EOF
+)"
+fi
 
 echo "$EXEC_FILE_CONTENT" > $EXEC_FILE
 chmod 777 $EXEC_FILE
@@ -89,7 +105,7 @@ echo "${FILE_CONTENT}" > ${CAMPAIGN_FILE}
 ## get the hash of the commit
 
 # CIGRI
-cd ~/cigri
+cd ~/NIX/cigri
 git checkout ${CTRL_CIGRI_BRANCH}
 CIGRI_COMMIT=$(git rev-parse --verify HEAD)
 
@@ -114,14 +130,18 @@ OAR_SERVER=$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[
 ###############################################################################
 ## Setup CiGri
 # Copying all the code
-ssh root@${CIGRI_SERVER}  "cp -r $HOME/NIX/cigri /usr/local/share/cigri"
+ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/modules/runner.rb /usr/local/share/cigri/modules"
+ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-control.rb /usr/local/share/cigri/lib"
+ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-joblib.rb /usr/local/share/cigri/lib"
+ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-colombolib.rb /usr/local/share/cigri/lib"
 # Copying the conf file
 ssh root@${CIGRI_SERVER}  "cp ${CIGRI_CONFIG} /etc/cigri/cigri.conf"
 # Path for the logs 
 ssh root@${CIGRI_SERVER}  "echo 'LOG_CTRL_FILE=\"/tmp/log.txt\"' >> /etc/cigri/cigri.conf"
 # Config for the controller
 ssh root@${CIGRI_SERVER}  "echo 'CTRL_CIGRI_CONFIG_FILE=\"${CTRLR_CONFIG}\"' >> /etc/cigri/cigri.conf"
-
+# Creating the log file
+ssh root@${CIGRI_SERVER}  "touch /tmp/log.txt; chmod 777 /tmp/log.txt"
 # Stopping CiGri
 ssh root@${CIGRI_SERVER}  "/etc/init.d/cigri force-stop"
 # Restarting CiGri
@@ -167,7 +187,7 @@ oardel $(oarstat -u -J | jq "to_entries[].value.Job_Id")
 ###############################################################################
 ## Generate the org document
 ##
-org_doc_content=$(cat <<EOF
+ORG_DOC_CONTENT=$(cat <<EOF
 #+TITLE: Experiemental Notebook
 #+AUTHOR: $(whoami)
 
@@ -327,6 +347,8 @@ oardel \$(oarstat -u -J | jq "to_entries[].value.Job_Id")
 #+END_SRC
 EOF
 	       )
+
+ORG_DOC=notebook_$(date +"%s").org
 echo "$ORG_DOC_CONTENT" > ${ORG_DOC}
 
 
