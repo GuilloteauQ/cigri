@@ -1,18 +1,92 @@
-#! /run/current-system/sw/bin/bash
+#! /bin/bash
 
 #TODO: gerer les params
 CIGRI_CONFIG=$1
 CTRLR_CONFIG=$2
-CAMPAIGN_FILE=$3
-CAMPAIGN_EXEC_FILE=$4
-DEPLOY_CONFIG=$5
+NUMBER_OF_JOBS=$3
+SLEEP_TIME=$4
+SIZE_OF_FILE=$5
+DEPLOY_CONFIG=$6
 
-CTRL_CIGRI_BRANCH=$6
+CTRL_CIGRI_BRANCH=$7
 
 ORG_DOC=notebook_$(date +"%s").org
 
+generate_exec_file() {
+    SLEEP_TIME=$1
+    SIZE_OF_FILE=$2
+    if [[ ${SIZE_OF_FILE} -ne 0 ]]
+        exec_file_content="$(cat <<EOF
+#!/bin/bash
+echo \$2 > \$1
+sleep ${SLEEP_TIME}
+dd if=/dev/zero of=//mnt/nfs0/file-nfs-$1 bs=$3 count=1 oflag=direct
+EOF
+)"
+        else
+        exec_file_content="$(cat <<EOF
+#!/bin/bash
+echo \$2 > \$1
+sleep ${SLEEP_TIME}
+EOF
+)"
+    fi
+    $exec_file_content
+}
+
+
 ###############################################################################
-## Get the hash of the commit
+## Generate the Campaign
+if [[ ${SIZE_OF_FILE} -ne 0 ]]
+    CAMPAIGN_NAME="campaign_${NUMBER_OF_JOBS}j_${SLEEP_TIME}s_${SIZE_OF_FILE}M"
+else
+    CAMPAIGN_NAME="campaign_${NUMBER_OF_JOBS}j_${SLEEP_TIME}s"
+    SIZE_OF_FILE=0
+fi
+
+#TODO: home is not really a good location to put that, but lacking more satisfying solution for the moment
+EXEC_FILE="$HOME/exec_file_${SLEEP_TIME}s_${SIZE_OF_FILE}M.sh"
+
+EXEC_FILE_CONTENT=$( generate_exec_file $SLEEP_TIME $SIZE_OF_FILE )
+
+echo "$EXEC_FILE_CONTENT" > $EXEC_FILE
+chmod 777 $EXEC_FILE
+
+FILE_CONTENT="$(cat <<EOF
+{
+  "name": "${CAMPAIGN_NAME}",
+  "resources": "resource_id=1",
+  "exec_file": "${EXEC_FILE}",
+  "test_mode": "false",
+  "clusters": {
+    "cluster_0": {
+      "type": "best-effort",
+      "walltime": "300"
+    }
+  },
+  "prologue": [
+    "mkdir $HOME/workdir",
+    "cd $HOME/workdir",
+    "touch prologue_works"
+  ],
+  "epilogue": [
+    "cd $HOME/workdir",
+    "touch epilogue_works"
+  ],
+  "params": [
+    $(for i in $(seq "$(($NUMBER_OF_JOBS - 1))"); do echo -e "\t\"param$i $i $SIZE_OF_FILE\",";done)
+    $(echo -e "\t\"param$NUMBER_OF_JOBS $NUMBER_OF_JOBS $SIZE_OF_FILE\"")
+  ]
+}
+EOF
+)"
+
+CAMPAIGN_FILE=$HOME/${CAMPAIGN_NAME}.json
+
+echo "${FILE_CONTENT}" > ${CAMPAIGN_FILE}
+
+###############################################################################
+## get the hash of the commit
 
 # CIGRI
 cd ~/cigri
@@ -55,6 +129,7 @@ ssh root@${CIGRI_SERVER}  "systemctl restart cigri"
 
 ###############################################################################
 ## Submit a Campaign
+
 ssh ${CIGRI_SERVER} -o StrictHostKeyChecking=no "gridsub -f ${CAMPAIGN_FILE}"
 
 
@@ -161,7 +236,13 @@ $(cat ${CIGRI_CONFIG})
 #+BEGIN_EXAMPLE
 $(cat ${CTRLR_CONFIG})
 #+END_EXAMPLE
-** Campaign File
+** Campaign
+*** Exec file
+#+NAME: exec_file
+#+BEGIN_EXAMPLE
+$(cat ${EXEC_FILE})
+#+END_EXAMPLE
+*** Campaign file
 #+NAME: campaign
 #+BEGIN_EXAMPLE
 $(cat ${CAMPAIGN_FILE})
