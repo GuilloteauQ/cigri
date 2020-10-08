@@ -256,11 +256,11 @@ while true do
     jobs.remove_blacklisted(cluster.id)
 
     controller.log()
-    controller.update_error(controller.get_waiting_jobs())
+    controller.update_error()
     controller.update_controlled_value()
 
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
-    if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps, controller.get_nb_jobs()) > 0 # if the tap is open
+    if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, controller.get_nb_jobs(), controller.get_percentage()) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
