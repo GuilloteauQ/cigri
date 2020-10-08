@@ -130,10 +130,18 @@ OAR_SERVER=$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[
 ###############################################################################
 ## Setup CiGri
 # Copying all the code
-ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/modules/runner.rb /usr/local/share/cigri/modules"
-ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-control.rb /usr/local/share/cigri/lib"
-ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-joblib.rb /usr/local/share/cigri/lib"
-ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-colombolib.rb /usr/local/share/cigri/lib"
+BASENAME_SRC=$HOME/NIX/cigri
+BASENAME_DES=/usr/local/share/cigri
+cd ${BASENAME_SRC}
+# TODO: will also list the files not committed .... how big of an issue is that ?
+# We should always be using a commited version of the codebase
+for file_to_copy in $(git diff master --name-only | grep -e "lib/" -e "modules/"); do
+    ssh root@${CIGRI_SERVER}  "cp ${BASENAME_SRC}/${file_to_copy} ${BASENAME_DES}/$(dirname ${file_to_copy})"
+done
+# ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/modules/runner.rb /usr/local/share/cigri/modules"
+# ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-control.rb /usr/local/share/cigri/lib"
+# ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-joblib.rb /usr/local/share/cigri/lib"
+# ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-colombolib.rb /usr/local/share/cigri/lib"
 # Copying the conf file
 ssh root@${CIGRI_SERVER}  "cp ${CIGRI_CONFIG} /etc/cigri/cigri.conf"
 # Path for the logs 
