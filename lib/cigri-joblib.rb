@@ -606,7 +606,7 @@ module Cigri
         # end
         # If the tap is closed since a short time, dont' send jobs
         # to the runner. It causes the runner to wait a bit for jobs to start.
-        if not taps[campaign_id].open? and 
+        if not taps[campaign_id].nil? and not taps[campaign_id].open? and 
              (Time::now().to_i - Time.parse(taps[campaign_id].props[:close_date]).to_i) < RUNNER_TAP_GRACE_PERIOD
            JOBLIBLOGGER.info("Waiting for tap grace period on cluster #{cluster_id} for campaign #{campaign_id}")
            break
