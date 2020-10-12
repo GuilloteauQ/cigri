@@ -1,24 +1,55 @@
 #! /bin/bash
 
-#TODO: gerer les params
-CIGRI_CONFIG=$1
-CTRLR_CONFIG=$2
-NUMBER_OF_JOBS=$3
-SLEEP_TIME=$4
-SIZE_OF_FILE=$5
-DEPLOY_CONFIG=$6
 
-CTRL_CIGRI_BRANCH=$7
+CAMPAIGN_PARAMS_ARRAY=()
+
+
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+
+    case $key in
+        --cigri-config)
+            CIGRI_CONFIG="$2"
+            shift # past argument
+            shift # past value
+            ;;
+        --ctrl-config)
+            CTRLR_CONFIG="$2"
+            shift # past argument
+            shift # past value
+            ;;
+        -b|--cigri-branch)
+            CTRL_CIGRI_BRANCH="$2"
+            shift # past argument
+            shift # past value
+            ;;
+        -d|--deploy-config)
+            DEPLOY_CONFIG="$2"
+            shift # past argument
+            shift # past value
+            ;;
+        -c|--campaign)
+            CAMPAIGN_PARAMS_ARRAY+=($2)
+            shift # past argument
+            shift # past value
+            ;;
+        *)    # unknown option
+            echo "Option: $key not found !"
+            shift # past argument
+            ;;
+    esac
+done
 
 
 generate_exec_file() {
-    SLEEP_TIME=$1
-    SIZE_OF_FILE=$2
-    if [[ ${SIZE_OF_FILE} -ne 0 ]]; then
+    sleep_time=$1
+    size_of_fIle=$2
+    if [[ ${size_of_file} -ne 0 ]]; then
         exec_file_content="$(cat <<EOF
 #!/bin/bash
 echo \$2 > \$1
-sleep ${SLEEP_TIME}
+sleep ${sleep_time}
 dd if=/dev/zero of=//mnt/nfs0/file-nfs-$1 bs=$3 count=1 oflag=direct
 EOF
 )"
@@ -26,7 +57,7 @@ EOF
         exec_file_content="$(cat <<EOF
 #!/bin/bash
 echo \$2 > \$1
-sleep ${SLEEP_TIME}
+sleep ${sleep_time}
 EOF
 )"
     fi
@@ -36,43 +67,41 @@ EOF
 
 ###############################################################################
 ## Generate the Campaign
-if [[ ${SIZE_OF_FILE} -ne 0 ]]; then
-    CAMPAIGN_NAME="campaign_${NUMBER_OF_JOBS}j_${SLEEP_TIME}s_${SIZE_OF_FILE}M"
-else
-    CAMPAIGN_NAME="campaign_${NUMBER_OF_JOBS}j_${SLEEP_TIME}s"
-    SIZE_OF_FILE=0
-fi
 
-#TODO: home is not really a good location to put that, but lacking more satisfying solution for the moment
-EXEC_FILE="$HOME/exec_file_${SLEEP_TIME}s_${SIZE_OF_FILE}M.sh"
+CAMPAIGN_NAMES_ARRAY=()
+CAMPAIGN_CONTENT_ARRAY=()
+EXEC_FILE_NAMES_ARRAY=()
+EXEC_FLIE_CONTENT_ARRAY=()
 
-EXEC_FILE_CONTENT=$( generate_exec_file $SLEEP_TIME $SIZE_OF_FILE )
+for raw_campaign_params in ${CAMPAIGN_PARAMS_ARRAY}; do
+    campaign_params=$(echo "${raw_campaign_params}" | tr -d "( )")
+    number_of_jobs=$(echo "${campaign_params}" | cut -d "," -f 1)
+    sleep_time=$(echo "${campaign_params}" | cut -d "," -f 2)
+    size_of_file=$(echo "${campaign_params}" | cut -d "," -f 3)
+    heaviness=$(echo "${campaign_params}" | cut -d "," -f 4)
 
-if [[ ${SIZE_OF_FILE} -ne 0 ]]; then
-    EXEC_FILE_CONTENT="$(cat <<EOF
-#!/bin/bash
-echo \$2 > \$1
-sleep ${SLEEP_TIME}
-dd if=/dev/zero of=//mnt/nfs0/file-nfs-$1 bs=$3 count=1 oflag=direct
-EOF
-)"
-else
-    EXEC_FILE_CONTENT="$(cat <<EOF
-#!/bin/bash
-echo \$2 > \$1
-sleep ${SLEEP_TIME}
-EOF
-)"
-fi
+    exec_file_content=$(generate_exec_file $sleep_time $size_of_file)
+    EXEC_FLIE_CONTENT_ARRAY+=($exec_file_content)
 
-echo "$EXEC_FILE_CONTENT" > $EXEC_FILE
-chmod 777 $EXEC_FILE
+    exec_file="$HOME/exec_file_${sleep_time}s_${size_of_file}M.sh"
+    EXEC_FILE_NAMES_ARRAY+=($exec_file)
 
-FILE_CONTENT="$(cat <<EOF
+    echo "${exec_file_content}" > ${exec_file}
+
+    if [[ ${size_of_file} -ne 0 ]]; then
+        campaign_name="campaign_${number_of_jobs}j_${sleep_time}s_${size_of_file}M"
+    else
+        campaign_name="campaign_${number_of_jobs}j_${sleep_time}s"
+    fi
+    campaign_file=$HOME/${campaign_name}.json
+    CAMPAIGN_NAMES_ARRAY+=($campaign_name)
+
+    file_content="$(cat <<EOF
 {
-  "name": "${CAMPAIGN_NAME}",
+  "name": "${campaign_name}",
   "resources": "resource_id=1",
-  "exec_file": "${EXEC_FILE}",
+  "exec_file": "${exec_file}",
+  "heaviness": ${heaviness},
   "test_mode": "false",
   "clusters": {
     "cluster_0": {
@@ -90,14 +119,17 @@ FILE_CONTENT="$(cat <<EOF
     "touch epilogue_works"
   ],
   "params": [
-    $(for i in $(seq "$(($NUMBER_OF_JOBS - 1))"); do echo -e "\t\"param$i $i $SIZE_OF_FILE\",";done)
-    $(echo -e "\t\"param$NUMBER_OF_JOBS $NUMBER_OF_JOBS $SIZE_OF_FILE\"")
+    $(for i in $(seq "$(($number_of_jobs - 1))"); do echo -e "\t\"param$i $i $size_of_file\",";done)
+    $(echo -e "\t\"param$number_of_jobs $number_of_jobs $size_of_file\"")
   ]
 }
 EOF
 )"
+    CAMPAIGN_CONTENT_ARRAY+=($file_content)
+    echo "${file_content}" > ${campaign_file}
 
-CAMPAIGN_FILE=$HOME/${CAMPAIGN_NAME}.json
+done
+
 
 echo "${FILE_CONTENT}" > ${CAMPAIGN_FILE}
 
@@ -135,6 +167,7 @@ BASENAME_DES=/usr/local/share/cigri
 cd ${BASENAME_SRC}
 # TODO: will also list the files not committed .... how big of an issue is that ?
 # We should always be using a commited version of the codebase
+# TODO: We could also print the output of git diff ?
 for file_to_copy in $(git diff master --name-only | grep -e "lib/" -e "modules/"); do
     ssh root@${CIGRI_SERVER}  "cp ${BASENAME_SRC}/${file_to_copy} ${BASENAME_DES}/$(dirname ${file_to_copy})"
 done
@@ -144,7 +177,7 @@ done
 # ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-colombolib.rb /usr/local/share/cigri/lib"
 # Copying the conf file
 ssh root@${CIGRI_SERVER}  "cp ${CIGRI_CONFIG} /etc/cigri/cigri.conf"
-# Path for the logs 
+# Path for the logs
 ssh root@${CIGRI_SERVER}  "echo 'LOG_CTRL_FILE=\"/tmp/log.txt\"' >> /etc/cigri/cigri.conf"
 # Config for the controller
 ssh root@${CIGRI_SERVER}  "echo 'CTRL_CIGRI_CONFIG_FILE=\"${CTRLR_CONFIG}\"' >> /etc/cigri/cigri.conf"
@@ -158,7 +191,9 @@ ssh root@${CIGRI_SERVER}  "systemctl restart cigri"
 ###############################################################################
 ## Submit a Campaign
 
-ssh ${CIGRI_SERVER} -o StrictHostKeyChecking=no "gridsub -f ${CAMPAIGN_FILE}"
+for campaign_file in $CAMPAIGN_NAMES_ARRAY; do
+    ssh ${CIGRI_SERVER} -o StrictHostKeyChecking=no "gridsub -f ${campaign_file}"
+done
 
 
 ###############################################################################
@@ -214,7 +249,7 @@ ${CIGRI_COMMIT}
 **** Revert to this commit
 #+BEGIN_SRC sh :var cigri_commit=cigri_commit
 cd ~/cigri
-git checkout \${cigri_commit} 
+git checkout \${cigri_commit}
 #+END_SRC
 
 **** Revert to latest commit
@@ -235,7 +270,7 @@ ${HPC_COMMIT}
 **** Revert to this commit
 #+BEGIN_SRC sh :var hpc_commit=hpc_commit
 cd ~/big-data-hpc-g5k-expe-tools
-git checkout ${hpc_commit} 
+git checkout ${hpc_commit}
 #+END_SRC
 **** Revert to latest commit
 #+BEGIN_SRC sh
@@ -290,15 +325,15 @@ $(cat ${log_file})
    Write you analysis and comments here
 * Redo this Experiment
 Just C-c C-c all the code blocks
-** Version CiGri 
+** Version CiGri
 #+BEGIN_SRC shell :session s1 :var cigri_commit=cigri_commit
 cd ~/cigri
-git checkout \${cigri_commit} 
+git checkout \${cigri_commit}
 #+END_SRC
 ** Version Big-data-hpc-g5k-expe-tools
 #+BEGIN_SRC shell :session s1 :var hpc_commit=hpc_commit
 cd ~/big-data-hpc-g5k-expe-tools
-git checkout \${hpc_commit} 
+git checkout \${hpc_commit}
 #+END_SRC
 ** Setup environment
 #+BEGIN_SRC shell :session s1
@@ -314,7 +349,7 @@ python oar_cigri_expe.py /tmp/config.yml
 #+BEGIN_SRC shell :session s1
 SERVER_CIGRI=\$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[0]')
 #+END_SRC
-** Setup CiGri 
+** Setup CiGri
 #+BEGIN_SRC shell :session s1 :var cigri_config=cigri_config :var ctrl_config=ctrl_config
 # Copying all the code
 ssh -t root@\${SERVER_CIGRI} -o StricHostKeyChecking=no "cp -r \$HOME/cigri /usr/local/share/cigri"
@@ -345,7 +380,7 @@ ssh \${SERVER_CIGRI} -o StrictHostKeyChecking=no "gridsub -f /tmp/campaign_file.
 Just wait ...
 Go to the CiGri node and run 'gridstat'
 ** Get back the logs
-#+BEGIN_SRC shell :session s1 
+#+BEGIN_SRC shell :session s1
 log_file=\$HOME/logs/log_\$(date +"%s").csv
 scp -o StrictHostKeyChecking=no  \${SERVER_CIGRI}:/tmp/log.txt ${log_file}
 #+END_SRC
@@ -356,7 +391,7 @@ oardel \$(oarstat -u -J | jq "to_entries[].value.Job_Id")
 EOF
 	       )
 
-ORG_DOC=notebook_$(date +"%s").org
+ORG_DOC=~/notebook_$(date +"%s").org
 echo "$ORG_DOC_CONTENT" > ${ORG_DOC}
 
 
