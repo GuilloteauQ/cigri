@@ -43,25 +43,19 @@ done
 
 
 generate_exec_file() {
-    sleep_time=$1
-    size_of_fIle=$2
+    local sleep_time=$1
+    local size_of_fIle=$2
+    local exec_file_content="$(cat <<EOF
+#!/bin/bash
+echo \$2 > \$1
+sleep ${sleep_time}
+EOF
+)"
+
     if [[ ${size_of_file} -ne 0 ]]; then
-        exec_file_content="$(cat <<EOF
-#!/bin/bash
-echo \$2 > \$1
-sleep ${sleep_time}
-dd if=/dev/zero of=//mnt/nfs0/file-nfs-$1 bs=$3 count=1 oflag=direct
-EOF
-)"
-    else
-        exec_file_content="$(cat <<EOF
-#!/bin/bash
-echo \$2 > \$1
-sleep ${sleep_time}
-EOF
-)"
+        local exec_file_content="$exec_file_content; dd if=/dev/zero of=//mnt/nfs0/file-nfs-\$1 bs=\$3 count=1 oflag=direct"
     fi
-    $exec_file_content
+    return $exec_file_content
 }
 
 
@@ -80,7 +74,8 @@ for raw_campaign_params in ${CAMPAIGN_PARAMS_ARRAY}; do
     size_of_file=$(echo "${campaign_params}" | cut -d "," -f 3)
     heaviness=$(echo "${campaign_params}" | cut -d "," -f 4)
 
-    exec_file_content=$(generate_exec_file $sleep_time $size_of_file)
+    generate_exec_file $sleep_time $size_of_file
+    exec_file_content=$?
     EXEC_FLIE_CONTENT_ARRAY+=($exec_file_content)
 
     exec_file="$HOME/exec_file_${sleep_time}s_${size_of_file}M.sh"
@@ -131,7 +126,6 @@ EOF
 done
 
 
-echo "${FILE_CONTENT}" > ${CAMPAIGN_FILE}
 
 ###############################################################################
 ## get the hash of the commit
