@@ -74,9 +74,17 @@ for raw_campaign_params in ${CAMPAIGN_PARAMS_ARRAY}; do
     size_of_file=$(echo "${campaign_params}" | cut -d "," -f 3)
     heaviness=$(echo "${campaign_params}" | cut -d "," -f 4)
 
-    generate_exec_file $sleep_time $size_of_file
-    exec_file_content=$?
-    EXEC_FLIE_CONTENT_ARRAY+=($exec_file_content)
+    exec_file_content="$(cat <<EOF
+#!/bin/bash
+echo \$2 > \$1
+sleep ${sleep_time}
+EOF
+)"
+
+    if [[ ${size_of_file} -ne 0 ]]; then
+        exec_file_content="$exec_file_content; dd if=/dev/zero of=//mnt/nfs0/file-nfs-\$1 bs=\$3 count=1 oflag=direct"
+    fi
+    EXEC_FILE_CONTENT_ARRAY+=($exec_file_content)
 
     exec_file="$HOME/exec_file_${sleep_time}s_${size_of_file}M.sh"
     EXEC_FILE_NAMES_ARRAY+=($exec_file)
@@ -89,7 +97,7 @@ for raw_campaign_params in ${CAMPAIGN_PARAMS_ARRAY}; do
         campaign_name="campaign_${number_of_jobs}j_${sleep_time}s"
     fi
     campaign_file=$HOME/${campaign_name}.json
-    CAMPAIGN_NAMES_ARRAY+=($campaign_name)
+    CAMPAIGN_NAMES_ARRAY+=($campaign_file)
 
     file_content="$(cat <<EOF
 {
