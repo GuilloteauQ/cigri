@@ -73,7 +73,7 @@ CAMPAIGN_CONTENT_ARRAY=()
 EXEC_FILE_NAMES_ARRAY=()
 EXEC_FLIE_CONTENT_ARRAY=()
 
-for raw_campaign_params in ${CAMPAIGN_PARAMS_ARRAY}; do
+for raw_campaign_params in ${CAMPAIGN_PARAMS_ARRAY[@]}; do
     campaign_params=$(echo "${raw_campaign_params}" | tr -d "( )")
     number_of_jobs=$(echo "${campaign_params}" | cut -d "," -f 1)
     sleep_time=$(echo "${campaign_params}" | cut -d "," -f 2)
@@ -203,7 +203,7 @@ ssh root@${CIGRI_SERVER}  "systemctl restart cigri"
 ###############################################################################
 ## Submit a Campaign
 
-for campaign_file in $CAMPAIGN_NAMES_ARRAY; do
+for campaign_file in ${CAMPAIGN_NAMES_ARRAY[@]}; do
     ssh ${CIGRI_SERVER} -o StrictHostKeyChecking=no "gridsub -f ${campaign_file}"
 done
 
