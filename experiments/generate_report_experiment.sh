@@ -1,8 +1,9 @@
-#! /bin/bash
+#!/bin/bash
 
 
 CAMPAIGN_PARAMS_ARRAY=()
 
+CTRLR_CONFIG=""
 
 while [[ $# -gt 0 ]]
 do
@@ -16,6 +17,11 @@ do
             ;;
         --ctrl-config)
             CTRLR_CONFIG="$2"
+            shift # past argument
+            shift # past value
+            ;;
+        --ctrl-config-raw)
+            CTRLR_CONFIG_CONTENT="$2"
             shift # past argument
             shift # past value
             ;;
@@ -182,6 +188,10 @@ ssh root@${CIGRI_SERVER}  "cp ${CIGRI_CONFIG} /etc/cigri/cigri.conf"
 # Path for the logs
 ssh root@${CIGRI_SERVER}  "echo 'LOG_CTRL_FILE=\"/tmp/log.txt\"' >> /etc/cigri/cigri.conf"
 # Config for the controller
+if [[ ${CTRLR_CONFIG} -z ]]; then
+    CTRLR_CONFIG=~/ctrl_config.json
+    echo "${CTRLR_CONFIG_CONTENT}" > ${CTRLR_CONFIG}
+fi
 ssh root@${CIGRI_SERVER}  "echo 'CTRL_CIGRI_CONFIG_FILE=\"${CTRLR_CONFIG}\"' >> /etc/cigri/cigri.conf"
 # Creating the log file
 ssh root@${CIGRI_SERVER}  "touch /tmp/log.txt; chmod 777 /tmp/log.txt"
@@ -223,11 +233,6 @@ done
 log_file=$HOME/logs/log_$(date +"%s").csv
 scp -o StrictHostKeyChecking=no  ${CIGRI_SERVER}:/tmp/log.txt ${log_file}
 
-###############################################################################
-## Release the resources from the Grid
-oardel $(oarstat -u -J | jq "to_entries[].value.Job_Id")
-
-
 
 ###############################################################################
 ## Generate the org document
@@ -250,13 +255,13 @@ ${CIGRI_COMMIT}
 #+END_EXAMPLE
 **** Revert to this commit
 #+BEGIN_SRC sh :var cigri_commit=cigri_commit
-cd ~/cigri
+cd ~/NIX/cigri
 git checkout \${cigri_commit}
 #+END_SRC
 
 **** Revert to latest commit
 #+BEGIN_SRC sh
-cd ~/cigri
+cd ~/NIX/cigri
 git checkout ${CTRL_CIGRI_BRANCH}
 #+END_SRC
 
@@ -277,7 +282,7 @@ git checkout ${hpc_commit}
 **** Revert to latest commit
 #+BEGIN_SRC sh
 cd ~/big-data-hpc-g5k-expe-tools
-git checkout PLOP
+git checkout master
 #+END_SRC
 
 ** Deploy Setup
@@ -287,8 +292,8 @@ $(cat ${DEPLOY_CONFIG})
 #+END_EXAMPLE
 
 ** Names of the nodes
-CiGri server was on: ${CIGRI_SERVER}
-OAR server was on: ${OAR_SERVER}
+CiGri server was on:* ${CIGRI_SERVER}*
+OAR server was on: *${OAR_SERVER}*
 
 ** CiGri Config
 #+NAME: cigri_config
@@ -301,7 +306,7 @@ $(cat ${CIGRI_CONFIG})
 #+BEGIN_EXAMPLE
 $(cat ${CTRLR_CONFIG})
 #+END_EXAMPLE
-** Campaign
+** Campaigns
 *** Exec file
 #+NAME: exec_file
 #+BEGIN_EXAMPLE
@@ -391,9 +396,13 @@ scp -o StrictHostKeyChecking=no  \${SERVER_CIGRI}:/tmp/log.txt ${log_file}
 oardel \$(oarstat -u -J | jq "to_entries[].value.Job_Id")
 #+END_SRC
 EOF
-	       )
+)
 
 ORG_DOC=~/notebook_$(date +"%s").org
 echo "$ORG_DOC_CONTENT" > ${ORG_DOC}
 
+
+###############################################################################
+## Release the resources from the Grid
+oardel $(oarstat -u -J | jq "to_entries[].value.Job_Id")
 
