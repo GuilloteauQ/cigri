@@ -593,7 +593,7 @@ module Cigri
       campaigns.each {|c| running_campaigns[c.id]=true }
       # We have to loop over each job, to check campaigns and taps
       jobs.each do |job|
-        # rate=0
+        rate=0
         campaign_id=job[:campaign_id].to_i
         # Skip paused campaigns
         if running_campaigns[campaign_id].nil? or running_campaigns[campaign_id]!=true
@@ -602,9 +602,9 @@ module Cigri
         end
         # Get the rate
         counts[campaign_id] ? counts[campaign_id]+=1 : counts[campaign_id]=1
-        # if not taps[campaign_id].nil?
-        #   rate=taps[campaign_id].props[:rate].to_i
-        # end
+        if not taps[campaign_id].nil?
+          rate=taps[campaign_id].props[:rate].to_i
+        end
         # If the tap is closed since a short time, dont' send jobs
         # to the runner. It causes the runner to wait a bit for jobs to start.
         if not taps[campaign_id].open? and 
