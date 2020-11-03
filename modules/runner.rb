@@ -264,6 +264,8 @@ while true do
       jobs = tolaunch_jobs.take
       # Remove jobs from blacklisted campaigns
       jobs.remove_blacklisted(cluster.id) if jobs != false
+    else
+      controller.update_nb_jobs_submitted(0)
     end
     if jobs!= false and jobs.length > 0
       # Submit the new jobs

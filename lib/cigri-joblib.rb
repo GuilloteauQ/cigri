@@ -573,7 +573,7 @@ module Cigri
     # Get jobs to launch on cluster cluster_id, with a limit per campaign
     # The tap hash contains the tap objects: open/closed and value of the 
     # max number of jobs to get (rate)
-    def get_next(cluster_id,taps={}, rate)
+    def get_next(cluster_id,taps={})
       # Get the jobs order by priority
       jobs=get("jobs_to_launch,bag_of_tasks","*","cluster_id=#{cluster_id} 
                                                     AND task_id=bag_of_tasks.id
@@ -627,45 +627,6 @@ module Cigri
       return self.length
     end
 
-
-    def get_next_with_respect_to_load(cluster_id, taps={}, rate, percentage)
-      # Get the jobs order by priority
-      jobs=get("jobs_to_launch,bag_of_tasks","*","cluster_id=#{cluster_id} 
-                                                    AND task_id=bag_of_tasks.id
-                                                    ORDER BY bag_of_tasks.priority DESC, order_num, jobs_to_launch.id")
-      # Percentage of each campaign in the buffer
-      cluster=Cluster.new(:id => cluster_id)
-      # Check for blacklisted and paused campaigns
-      campaigns_blacklist={}
-      jobs.each {|j| campaigns_blacklist[j[:campaign_id].to_i]=false}
-      campaigns_blacklist.each_key do |c|
-        campaigns_blacklist[c]=true if cluster.blacklisted?(:campaign_id => c)
-      end
-      running_campaigns={}
-      campaigns=Campaignset.new
-      campaigns.get_running
-      campaigns.each {|c| running_campaigns[c.id]=true }
-      campaign_heaviness = {}
-      campaigns.each do |c|
-        json = JSON.parse(c.props[:jdl])
-        campaign_heaviness[c.id] = json["clusters"][cluster.name]["heaviness"]
-      end
-        selected_campaigns = running_campaigns.select{ |id, is_running| is_running and not campaigns_blacklist[id] }
-        # TODO select one heavy and one light
-        selected_campaigns = selected_campaigns.keys.sort()
-        rates = get_rates_for_campaigns(selected_campaigns, campaign_heaviness, rate, percentage)
-      counts={}
-      p rates
-      jobs.select{|j| !rates[j[:campaign_id].to_i].nil? }.each do |job| 
-        campaign_id = job[:campaign_id].to_i
-        counts[campaign_id] ? counts[campaign_id]+=1 : counts[campaign_id]=1
-        if counts[campaign_id] <= rates[campaign_id]
-          job[:nodb]=true
-          @records << Datarecord.new(@table,job) 
-        end
-      end
-      return self.length
-    end
 
     # Take the jobs from the bag of tasks and return newly created jobs.
     # This is done in an atomical way to prevent from losing jobs in case of a 
