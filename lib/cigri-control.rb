@@ -10,37 +10,17 @@ class Controller
   #   - some constant matrices
   def initialize(logfile, cluster, config_file)
     config_data = JSON.parse(File.read(config_file))
-    @nb_jobs = config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
-    @percentage = config_data["percentage"].nil? ? 50 : config_data["percentage"].to_i
-    @reference = config_data["reference"].nil? ? 10 : config_data["reference"].to_i
-	@error = 0
+    @nb_jobs = 0
 	@logfile = logfile # TODO: May need to create the file if does not exist
 	@cluster = cluster
-    @kp_jobs = config_data["kp_jobs"].nil? ? 1 : config_data["kp_jobs"].to_f
-    @kp_percentage = config_data["kp_percentage"].nil? ? 1 : config_data["kp_percentage"].to_f
-    @reference_stress_factor = config_data["ref_stress_factor"].nil? ? 1 : config_data["ref_stress_factor"].to_f
-    @has_running_campaigns = true
-    @threshold = config_data["threshold"].nil? ? 1 : config_data["threshold"].to_f
-  end
-
-  def update_has_running_campaigns()
-    @has_running_campaigns = (@has_running_campaigns or self.get_running_jobs() + self.get_waiting_jobs() > 0)
   end
 
   def update_controlled_value()
-    print(">> updating controlled values (previous values: (#{@nb_jobs}, #{@percentage}))\n")
-    if @has_running_campaigns
-      print("error: #{@error}\n")
-      if (@error).abs() >= @threshold
-        @nb_jobs = bound_nb_jobs(@nb_jobs + p_controller(@error, @kp_jobs))
-      elsif @nb_jobs > 0
-        # If we change the percentage when there is no job, this means
-        # that we are regulating the load of an empty cluster...
-        # So we make sure this does not happen
-        @percentage = bound_percentage(@percentage + p_controller(@error, @kp_percentage))
-      end
-    end
-    print("<< updated controlled values (new values: (#{@nb_jobs}, #{@percentage}))\n")
+    return
+  end
+
+  def update_nb_jobs_submitted(n)
+    @nb_jobs = n
   end
 
   def get_fileserver_load()
@@ -53,12 +33,12 @@ class Controller
   end
 
   def update_error()
-    @error = @reference_stress_factor - self.get_fileserver_load()
+    return
   end
 
   def log()
 	file = File.open(@logfile, "a+")
-        file << "#{Time.now.to_i}, #{@nb_jobs}, #{@percentage}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_fileserver_load}, #{self.get_cluster_load}, #{@has_running_campaigns}\n"
+        file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_fileserver_load}, #{self.get_cluster_load}\n"
     file.close
   end
 
@@ -84,18 +64,9 @@ class Controller
 	@cluster.get_global_stress_factor
   end
 
-  def get_error()
-	@error
-  end
-
   def get_nb_jobs()
 	@nb_jobs
   end
-
-  def get_percentage()
-	@percentage
-  end
-
 end
 
 def p_controller(error, k)
