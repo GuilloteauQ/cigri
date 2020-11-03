@@ -19,7 +19,7 @@ class Controller
     @kp_jobs = config_data["kp_jobs"].nil? ? 1 : config_data["kp_jobs"].to_f
     @kp_percentage = config_data["kp_percentage"].nil? ? 1 : config_data["kp_percentage"].to_f
     @reference_stress_factor = config_data["ref_stress_factor"].nil? ? 1 : config_data["ref_stress_factor"].to_f
-    @has_running_campaigns = false
+    @has_running_campaigns = true
     @threshold = config_data["threshold"].nil? ? 1 : config_data["threshold"].to_f
   end
 
@@ -43,31 +43,40 @@ class Controller
     print("<< updated controlled values (new values: (#{@nb_jobs}, #{@percentage}))\n")
   end
 
+  def get_fileserver_load()
+    loadavg_per_sensor = []
+    Dir.glob("/tmp/loadavg_storage_server[0-9]").sort().each_with_index do |f, i|
+      l =  `tail -n 1 #{f}`.split()
+      loadavg_per_sensor[i] = {:date => l[0], :mn1 => l[1].to_f, :mn5 => l[2].to_f, :mn15 => l[3].to_f}
+    end
+    loadavg_per_sensor[0][:mn1]
+  end
+
   def update_error()
-    @error = @reference_stress_factor - self.get_cluster_load()
+    @error = @reference_stress_factor - self.get_fileserver_load()
   end
 
   def log()
 	file = File.open(@logfile, "a+")
-    file << "#{Time.now.to_i}, #{@nb_jobs}, #{@percentage}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_cluster_load}, #{@has_running_campaigns}\n"
+        file << "#{Time.now.to_i}, #{@nb_jobs}, #{@percentage}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_fileserver_load}, #{self.get_cluster_load}, #{@has_running_campaigns}\n"
     file.close
   end
 
   def get_running_jobs()
 	cluster_jobs = @cluster.get_jobs()
     nb_running_jobs = cluster_jobs.select{|j| j["state"] == "Running" or j["state"] == "Finishing" or j["state"] == "Launching"}.length
-    if nb_running_jobs > 0
-      @has_running_campaigns = true
-    end
+    # if nb_running_jobs > 0
+    #   @has_running_campaigns = true
+    # end
     nb_running_jobs
   end
 
   def get_waiting_jobs()
 	cluster_jobs = @cluster.get_jobs()
     nb_waiting_jobs = cluster_jobs.select{|j| j["state"] == "Waiting"}.length
-    if nb_waiting_jobs > 0
-      @has_running_campaigns = true
-    end
+    # if nb_waiting_jobs > 0
+    #   @has_running_campaigns = true
+    # end
     nb_waiting_jobs
   end
 

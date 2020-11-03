@@ -90,12 +90,13 @@ EOF
     if [[ ${size_of_file} -ne 0 ]]; then
         exec_file_content="$exec_file_content; dd if=/dev/zero of=//mnt/nfs0/file-nfs-\$1 bs=\$3 count=1 oflag=direct"
     fi
-    EXEC_FILE_CONTENT_ARRAY+=($exec_file_content)
+    EXEC_FILE_CONTENT_ARRAY+=("$exec_file_content")
 
     exec_file="$HOME/exec_file_${sleep_time}s_${size_of_file}M.sh"
-    EXEC_FILE_NAMES_ARRAY+=($exec_file)
+    EXEC_FILE_NAMES_ARRAY+=("$exec_file")
 
     echo "${exec_file_content}" > ${exec_file}
+    chmod u+x ${exec_file}
 
     if [[ ${size_of_file} -ne 0 ]]; then
         campaign_name="campaign_${number_of_jobs}j_${sleep_time}s_${size_of_file}M"
@@ -103,7 +104,7 @@ EOF
         campaign_name="campaign_${number_of_jobs}j_${sleep_time}s"
     fi
     campaign_file=$HOME/${campaign_name}.json
-    CAMPAIGN_NAMES_ARRAY+=($campaign_file)
+    CAMPAIGN_NAMES_ARRAY+=("$campaign_file")
 
     file_content="$(cat <<EOF
 {
@@ -119,7 +120,7 @@ EOF
     }
   },
   "prologue": [
-    "mkdir $HOME/workdir",
+    "mkdir -p $HOME/workdir",
     "cd $HOME/workdir",
     "touch prologue_works"
   ],
@@ -128,13 +129,13 @@ EOF
     "touch epilogue_works"
   ],
   "params": [
-    $(for i in $(seq "$(($number_of_jobs - 1))"); do echo -e "\t\"param$i $i $size_of_file\",";done)
+    $(for i in $(seq "$(($number_of_jobs - 1))"); do echo -e "\t\"param$i $i ${size_of_file}M\",";done)
     $(echo -e "\t\"param$number_of_jobs $number_of_jobs $size_of_file\"")
   ]
 }
 EOF
 )"
-    CAMPAIGN_CONTENT_ARRAY+=($file_content)
+    CAMPAIGN_CONTENT_ARRAY+=("$file_content")
     echo "${file_content}" > ${campaign_file}
 
 done
@@ -177,34 +178,36 @@ cd ${BASENAME_SRC}
 # We should always be using a commited version of the codebase
 # TODO: We could also print the output of git diff ?
 for file_to_copy in $(git diff master --name-only | grep -e "lib/" -e "modules/"); do
-    ssh root@${CIGRI_SERVER}  "cp ${BASENAME_SRC}/${file_to_copy} ${BASENAME_DES}/$(dirname ${file_to_copy})"
+    ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "cp ${BASENAME_SRC}/${file_to_copy} ${BASENAME_DES}/$(dirname ${file_to_copy})"
 done
 # ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/modules/runner.rb /usr/local/share/cigri/modules"
 # ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-control.rb /usr/local/share/cigri/lib"
 # ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-joblib.rb /usr/local/share/cigri/lib"
 # ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-colombolib.rb /usr/local/share/cigri/lib"
 # Copying the conf file
-ssh root@${CIGRI_SERVER}  "cp ${CIGRI_CONFIG} /etc/cigri/cigri.conf"
+ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "cp ${CIGRI_CONFIG} /etc/cigri/cigri.conf"
 # Path for the logs
-ssh root@${CIGRI_SERVER}  "echo 'LOG_CTRL_FILE=\"/tmp/log.txt\"' >> /etc/cigri/cigri.conf"
+ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "echo 'LOG_CTRL_FILE=\"/tmp/log.txt\"' >> /etc/cigri/cigri.conf"
 # Config for the controller
-if [[ ${CTRLR_CONFIG} -z ]]; then
+if [[ -z "${CTRLR_CONFIG}" ]]; then
     CTRLR_CONFIG=~/ctrl_config.json
     echo "${CTRLR_CONFIG_CONTENT}" > ${CTRLR_CONFIG}
 fi
-ssh root@${CIGRI_SERVER}  "echo 'CTRL_CIGRI_CONFIG_FILE=\"${CTRLR_CONFIG}\"' >> /etc/cigri/cigri.conf"
+ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "echo 'CTRL_CIGRI_CONFIG_FILE=\"${CTRLR_CONFIG}\"' >> /etc/cigri/cigri.conf"
 # Creating the log file
-ssh root@${CIGRI_SERVER}  "touch /tmp/log.txt; chmod 777 /tmp/log.txt"
+ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "touch /tmp/log.txt; chmod 777 /tmp/log.txt"
 # Stopping CiGri
-ssh root@${CIGRI_SERVER}  "/etc/init.d/cigri force-stop"
+ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "/etc/init.d/cigri force-stop"
 # Restarting CiGri
-ssh root@${CIGRI_SERVER}  "systemctl restart cigri"
+ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "systemctl restart cigri"
+
+sleep 10
 
 ###############################################################################
 ## Submit a Campaign
 
 for campaign_file in ${CAMPAIGN_NAMES_ARRAY[@]}; do
-    ssh ${CIGRI_SERVER} -o StrictHostKeyChecking=no "gridsub -f ${campaign_file}"
+    ssh ${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "gridsub -f ${campaign_file}"
 done
 
 
@@ -214,8 +217,8 @@ done
 # status=$(gridstat -c 1 | sed -n 's/State:*\([^ ]*\)/\1/p' | sed -e 's/^[ \t]*//' | sed -e 's/[ \t]*$//')
 
 get_status() {
-    ssh ${CIGRI_SERVER} -o StrictHostKeyChecking=no "gridstat -c 1 > /tmp/output_gridstat"
-    scp -o StrictHostKeyChecking=no  ${CIGRI_SERVER}:/tmp/output_gridstat /tmp/output_gridstat
+    ssh ${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "gridstat -c 1 > /tmp/output_gridstat"
+    scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${CIGRI_SERVER}:/tmp/output_gridstat /tmp/output_gridstat
     cat /tmp/output_gridstat | sed -n 's/State:*\([^ ]*\)/\1/p' | sed -e 's/^[ \t]*//' | sed -e 's/[ \t]*$//'
 }
 
@@ -231,14 +234,15 @@ done
 ###############################################################################
 ## Get back the logs
 log_file=$HOME/logs/log_$(date +"%s").csv
-scp -o StrictHostKeyChecking=no  ${CIGRI_SERVER}:/tmp/log.txt ${log_file}
+scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${CIGRI_SERVER}:/tmp/log.txt ${log_file}
 
 
 ###############################################################################
 ## Generate the org document
 ##
-ORG_DOC_CONTENT=$(cat <<EOF
-#+TITLE: Experiemental Notebook
+ORG_DOC=~/notebook_$(date +"%s").org
+ORG_DOC_CONTENT="$(cat <<EOF
+#+TITLE: Experiemental Notebook ($(date))
 #+AUTHOR: $(whoami)
 
 * TODO Hypothesis
@@ -266,18 +270,16 @@ git checkout ${CTRL_CIGRI_BRANCH}
 #+END_SRC
 
 ** Version Big-data-hpc-g5k-expe-tools
-*** Branch
-The branch used for this experiment was **
 *** Commit
 The commit used for this experiment was:
 #+NAME: hpc_commit
 #+BEGIN_EXAMPLE
-${HPC_COMMIT}
+${EXPE_TOOLS_COMMIT}
 #+END_EXAMPLE
 **** Revert to this commit
 #+BEGIN_SRC sh :var hpc_commit=hpc_commit
 cd ~/big-data-hpc-g5k-expe-tools
-git checkout ${hpc_commit}
+git checkout ${EXPE_TOOLS_COMMIT}
 #+END_SRC
 **** Revert to latest commit
 #+BEGIN_SRC sh
@@ -292,7 +294,7 @@ $(cat ${DEPLOY_CONFIG})
 #+END_EXAMPLE
 
 ** Names of the nodes
-CiGri server was on:* ${CIGRI_SERVER}*
+CiGri server was on: *${CIGRI_SERVER}*
 OAR server was on: *${OAR_SERVER}*
 
 ** CiGri Config
@@ -306,18 +308,23 @@ $(cat ${CIGRI_CONFIG})
 #+BEGIN_EXAMPLE
 $(cat ${CTRLR_CONFIG})
 #+END_EXAMPLE
-** Campaigns
-*** Exec file
-#+NAME: exec_file
-#+BEGIN_EXAMPLE
-$(cat ${EXEC_FILE})
-#+END_EXAMPLE
-*** Campaign file
-#+NAME: campaign
-#+BEGIN_EXAMPLE
-$(cat ${CAMPAIGN_FILE})
-#+END_EXAMPLE
+EOF
+)
+"
+echo "$ORG_DOC_CONTENT" > ${ORG_DOC}
 
+
+campaign_string="** Campaigns"
+
+for i in ${!CAMPAIGN_NAMES_ARRAY[@]}; do
+	campaign_string="$campaign_string\n*** ${CAMPAIGN_NAMES_ARRAY[$i]}\n**** Exec File\n#+BEGIN_EXAMPLE\n$(echo "${EXEC_FILE_CONTENT_ARRAY[$i]}")\n#+END_EXAMPLE\n**** Campaign File\n#+BEGIN_EXAMPLE\n$(echo "${CAMPAIGN_CONTENT_ARRAY[$i]}")\n#+END_EXAMPLE"
+done
+
+echo -e "${campaign_string}" >> ${ORG_DOC}
+
+
+
+ORG_DOC_CONTENT_RESULTS="$(cat <<EOF
 * Experimental Results
 ** Log file
 #+NAME: results
@@ -330,6 +337,12 @@ $(cat ${log_file})
 #+END_SRC
 ** TODO Analysis and comments
    Write you analysis and comments here
+EOF
+)
+"
+echo "$ORG_DOC_CONTENT_RESULTS" >> ${ORG_DOC}
+
+ORG_DOC_CONTENT_REPRO="$(cat <<EOF
 * Redo this Experiment
 Just C-c C-c all the code blocks
 ** Version CiGri
@@ -396,10 +409,8 @@ scp -o StrictHostKeyChecking=no  \${SERVER_CIGRI}:/tmp/log.txt ${log_file}
 oardel \$(oarstat -u -J | jq "to_entries[].value.Job_Id")
 #+END_SRC
 EOF
-)
+)"
 
-ORG_DOC=~/notebook_$(date +"%s").org
-echo "$ORG_DOC_CONTENT" > ${ORG_DOC}
 
 
 ###############################################################################
