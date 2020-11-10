@@ -73,12 +73,18 @@ CAMPAIGN_CONTENT_ARRAY=()
 EXEC_FILE_NAMES_ARRAY=()
 EXEC_FLIE_CONTENT_ARRAY=()
 
+USES_NFS=0
+FILE_SIZES_PATTERN=""
+CAMPAIGN_ID=0
+
 for raw_campaign_params in ${CAMPAIGN_PARAMS_ARRAY[@]}; do
     campaign_params=$(echo "${raw_campaign_params}" | tr -d "( )")
     number_of_jobs=$(echo "${campaign_params}" | cut -d "," -f 1)
     sleep_time=$(echo "${campaign_params}" | cut -d "," -f 2)
     size_of_file=$(echo "${campaign_params}" | cut -d "," -f 3)
     heaviness=$(echo "${campaign_params}" | cut -d "," -f 4)
+
+    CAMPAIGN_ID=$(($CAMPAIGN_ID + 1))
 
     exec_file_content="$(cat <<EOF
 #!/bin/bash
@@ -88,7 +94,8 @@ EOF
 )"
 
     if [[ ${size_of_file} -ne 0 ]]; then
-        exec_file_content="$exec_file_content; dd if=/dev/zero of=//mnt/nfs0/file-nfs-\$1 bs=\$3 count=1 oflag=direct"
+	    #exec_file_content="$exec_file_content; TIMEFORMAT=%R ; echo \"\$(date +%s), \$(time \$(dd if=/dev/zero of=//mnt/nfs0/file-nfs-${CAMPAIGN_ID}-\$2 bs=\$3 count=1 oflag=direct &> /dev/null))\" >> $HOME/fileserver_dd_time.csv"
+	    exec_file_content="$exec_file_content; dd if=/dev/zero of=//mnt/nfs0/file-nfs-${CAMPAIGN_ID}-\$2 bs=\$3 count=1 oflag=direct"
     fi
     EXEC_FILE_CONTENT_ARRAY+=("$exec_file_content")
 
@@ -100,6 +107,13 @@ EOF
 
     if [[ ${size_of_file} -ne 0 ]]; then
         campaign_name="campaign_${number_of_jobs}j_${sleep_time}s_${size_of_file}M"
+	USES_NFS=1
+	if [[ "${FILE_SIZES_PATTERN}" = "" ]]
+	then
+	    FILE_SIZES_PATTERN="${size_of_file}M"
+	else
+	    FILE_SIZES_PATTERN="${FILE_SIZES_PATTERN}|${size_of_file}M"
+    	fi
     else
         campaign_name="campaign_${number_of_jobs}j_${sleep_time}s"
     fi
@@ -140,6 +154,10 @@ EOF
 
 done
 
+# echo "$FILE_SIZES_PATTERN"
+# echo "$USES_NFS"
+
+
 
 
 ###############################################################################
@@ -166,7 +184,7 @@ python ~/big-data-hpc-g5k-expe-tools/examples/augu5te/oar_cigri_expe.py ${DEPLOY
 ## Save the names of the nodes
 CIGRI_SERVER=$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[0]')
 OAR_SERVER=$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[1]')
-#TODO: Also fileserver
+STORAGE_SERVER=$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[2]')
 
 ###############################################################################
 ## Setup CiGri
@@ -200,6 +218,14 @@ ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyCheckin
 ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "/etc/init.d/cigri force-stop"
 # Restarting CiGri
 ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "systemctl restart cigri"
+
+# Setup GC in the fileserver
+if [[ "${USES_NFS}" -eq "1" ]]
+then
+	echo "$FILE_SIZES_PATTERN"
+    ssh ${STORAGE_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "sh $HOME/NIX/cigri/experiments/start_gc_fileserver.sh \"${FILE_SIZES_PATTERN}\"" &
+fi
+
 
 sleep 10
 
