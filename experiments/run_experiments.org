@@ -47,6 +47,8 @@ DEPLOY_CONFIG=~/big-data-hpc-g5k-expe-tools/examples/augu5te/expe_cigri_oar3_tin
 DEPLOY_CONFIG=~/big-data-hpc-g5k-expe-tools/examples/augu5te/expe_oar3_cigri_storage_tiny.yaml
 #+END_SRC
 
+#+RESULTS:
+
 *** Pick up the config for CiGri                                  :Mandatory:
 **** Use default config                                            :Optional:
 Change the path to the location of the CiGri config.
@@ -193,10 +195,15 @@ GRID_USAGE_SYNC_TIME="10"
 #+END_EXAMPLE
 
 *DONT FORGET TO EXECUTE THE FOLLOWING CODE BLOCK*
-#+BEGIN_SRC sh :session org-session :var custom_cigri_config=custom_cigri_conf
+#+BEGIN_SRC sh :session org-session :var custom_cigri_config=custom_cigri_config
 CIGRI_CONFIG=~/custom_cigri.conf
 echo "${custom_cigri_config}" > ${CIGRI_CONFIG} && echo "CiGri Config set up !" || echo "Could not set CiGri config"
 #+END_SRC
+
+#+RESULTS:
+|                                                                                                                                                                                                                                                                                                         |
+| > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > sh-5.0$ sh-5.0$ CiGri Config set up ! |
+
 *** Pick the Controller to use                                    :Mandatory:
 **** P
 #+BEGIN_SRC sh :session org-session
@@ -212,8 +219,11 @@ CTRL_CIGRI_BRANCH=controllers/MPC
 #+END_SRC
 **** Mixed Campaigns
 #+BEGIN_SRC sh :session org-session
-CTRL_CIGRI_BRANCH=controllers/mixed_campaigns
+CTRL_CIGRI_BRANCH=controllers/mixed_campaigns_merge_gc
 #+END_SRC
+
+#+RESULTS:
+
 *** Pick the Setup for the Controller                             :Mandatory:
 **** Init (don't forget me :( ... )                               :Mandatory:
 We set the path to the config file to the controller
@@ -222,6 +232,9 @@ Note that you cannot put it in folders like /tmp
 #+BEGIN_SRC sh :session org-session
 CTRLR_CONFIG=~/ctrl_config.json
 #+END_SRC
+
+#+RESULTS:
+
 **** Configuration of the Controller                              :Mandatory:
 ***** P
 ****** JSON file
@@ -297,9 +310,9 @@ Change the JSON file below.
 #+BEGIN_EXAMPLE
 {
     "nb_jobs": 0,
-    "percentage": 50,
+    "percentage": 100,
     "kp_jobs": 1,
-    "kp_percentage": 10,
+    "kp_percentage": 0,
     "ref_stress_factor": 3
 }
 #+END_EXAMPLE
@@ -307,13 +320,21 @@ Change the JSON file below.
 #+BEGIN_SRC sh :session org-session :var ctrl_config=config_mixed_c
 echo "${ctrl_config}" > ${CTRLR_CONFIG} && echo "Controller config set up !" || echo "Error while setting up the controller config"
 #+END_SRC
+
+#+RESULTS:
+|                                                |
+| > > > > > > sh-5.0$ Controller config set up ! |
+
 *** Campaign to submit                                            :Mandatory:
 **** Init (don't forget me :( ... )                               :Mandatory:
 This array is required so we can submit multiple campaigns to the
 experiment launcher script
 #+BEGIN_SRC sh :session org-session
-CAMPAINGS_TO_SUBMIT=()
+CAMPAIGNS_TO_SUBMIT=()
 #+END_SRC
+
+#+RESULTS:
+
 **** Description of the campaign                                  :Mandatory:
 In this section we describe the campaign to submit.
 Please change the different values and then submit the code block.
@@ -327,7 +348,7 @@ NB_JOBS=1000
 SLEEP_TIME=30
 # If the jobs need to affect the fileserver, please change the file size (in MiB).
 # Please write 0, if you do not want to use the fileserver
-FILE_SIZE=0
+FILE_SIZE=10
 # Is you campaign IO heavy (compared to other campaigns you will submit) ?
 # If unsure, set to false.
 HEAVINESS=false
@@ -335,8 +356,11 @@ HEAVINESS=false
 # Description of the campaign formated to be read by the experiment launcher script
 CAMPAIGN="(${NB_JOBS},${SLEEP_TIME},${FILE_SIZE},${HEAVINESS})"
 # Adding the campaign to the list of campaigns to submit
-CAMPAIGNS_TO_SUBMIT+=${CAMPAIGN}
+CAMPAIGNS_TO_SUBMIT+=(${CAMPAIGN})
 #+END_SRC
+
+#+RESULTS:
+
 *** Submit the experiment
 #+BEGIN_SRC sh :session org-session :var ctrl_config=config_mpc_controller
 PATH_TO_SCRIPT=~/NIX/cigri/experiments/generate_report_experiment.sh
@@ -346,14 +370,11 @@ base_command="sh ${PATH_TO_SCRIPT} --deploy-config ${DEPLOY_CONFIG} \
                    --cigri-branch ${CTRL_CIGRI_BRANCH} \
 		   --cigri-config ${CIGRI_CONFIG} \
 		   --ctrl-config-raw \"${ctrl_config}\""
-# base_command="sh ${PATH_TO_SCRIPT} --deploy-config ${DEPLOY_CONFIG} \
-#                    --cigri-branch ${CTRL_CIGRI_BRANCH} \
-# 		   --cigri-config ${CIGRI_CONFIG} \
-# 		   --ctrl-config ${CTRLR_CONFIG}"
+base_command="sh ${PATH_TO_SCRIPT} --deploy-config ${DEPLOY_CONFIG} --cigri-branch ${CTRL_CIGRI_BRANCH} --cigri-config ${CIGRI_CONFIG} --ctrl-config ${CTRLR_CONFIG}"
 # Adding the campaigns to submit
 for campaign in "${CAMPAIGNS_TO_SUBMIT[@]}"
 do
-    base_command="${base_command} -c ${campaign}"
+    base_command="${base_command} -c \"${campaign}\""
 done
 
 # Executing the command
@@ -362,8 +383,25 @@ echo "${base_command}"
 #+END_SRC
 
 #+BEGIN_SRC sh :session org-session
-eval ${base_command} && echo "Command executed succesfully !" || echo "Error executing the error"
+for c in "${CAMPAIGNS_TO_SUBMIT[@]}"
+do
+    echo "$c"
+done
+
 #+END_SRC
+
+#+RESULTS:
+|           |    |     |        |
+| > > (1000 | 30 | 100 | true)  |
+| (1000     | 30 |  10 | false) |
+
+#+BEGIN_SRC sh :session org-session
+eval ${base_command} &
+#+END_SRC
+
+#+RESULTS:
+: [1] 18323
+
 *** Get the log file back                                         :Mandatory:
     *DO NOT FORGET TO CHANGE THE NAME OF THE DESTINATION FILE*
 #+BEGIN_SRC sh :exports code
