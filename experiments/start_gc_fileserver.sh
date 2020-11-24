@@ -10,6 +10,6 @@ cd ${NFS_SERVER_DIR}
 
 while true
 do
-	ls -lh | grep -E ${FILE_SIZES_PATTERN} | cut -d " " -f 10 | xargs rm
-	sleep 15
+	ls -lh | grep -E ${FILE_SIZES_PATTERN} | rev | cut -d " " -f 1 | rev | xargs rm &> /dev/null
+	sleep 2
 done

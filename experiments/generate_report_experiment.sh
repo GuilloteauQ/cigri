@@ -236,11 +236,23 @@ for campaign_file in ${CAMPAIGN_NAMES_ARRAY[@]}; do
     ssh ${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "gridsub -f ${campaign_file}"
 done
 
+sleep 10
+
 
 ###############################################################################
 ## Wait until Campaign is over
 #TODO: Only work for the first campaign
 # status=$(gridstat -c 1 | sed -n 's/State:*\([^ ]*\)/\1/p' | sed -e 's/^[ \t]*//' | sed -e 's/[ \t]*$//')
+
+NUMBER_OF_CAMPAIGNS=$((${#CAMPAIGN_NAMES_ARRAY[@]} - 1))
+# NUMBER_OF_CAMPAIGNS=0
+
+get_number_of_terminated_campaigns() {
+    ssh ${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "gridstat -d > /tmp/output_gridstat"
+    scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  ${CIGRI_SERVER}:/tmp/output_gridstat /tmp/output_gridstat
+    # cat /tmp/output_gridstat | jq ".items[].state" | grep "terminated" -c
+    cat /tmp/output_gridstat | jq ".total"
+}
 
 get_status() {
     ssh ${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "gridstat -c 1 > /tmp/output_gridstat"
@@ -248,13 +260,16 @@ get_status() {
     cat /tmp/output_gridstat | sed -n 's/State:*\([^ ]*\)/\1/p' | sed -e 's/^[ \t]*//' | sed -e 's/[ \t]*$//'
 }
 
-status=$( get_status )
+#status=$( get_status )
+nb_terminated=$( get_number_of_terminated_campaigns )
 
-while [ "$status" != "terminated" ]
+#while [ "$status" != "terminated" ]
+while [ $nb_terminated -ne $NUMBER_OF_CAMPAIGNS ]
 do
 	sleep 15
 	# status=$(gridstat -c 1 | sed -n 's/State:*\([^ ]*\)/\1/p' | sed -e 's/^[ \t]*//' | sed -e 's/[ \t]*$//')
-	status=$( get_status )
+	# status=$( get_status )
+	nb_terminated=$( get_number_of_terminated_campaigns )
 done
 
 ###############################################################################
