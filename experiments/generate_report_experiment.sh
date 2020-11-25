@@ -224,6 +224,7 @@ if [[ "${USES_NFS}" -eq "1" ]]
 then
 	echo "$FILE_SIZES_PATTERN"
     ssh ${STORAGE_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "sh $HOME/NIX/cigri/experiments/start_gc_fileserver.sh \"${FILE_SIZES_PATTERN}\"" &
+    PID_GC=$?
 fi
 
 
@@ -452,6 +453,11 @@ oardel \$(oarstat -u -J | jq "to_entries[].value.Job_Id")
 EOF
 )"
 
+
+if [[ "${USES_NFS}" -eq "1" ]]
+then
+    kill ${PID_GC}
+fi
 
 
 ###############################################################################
