@@ -464,3 +464,13 @@ fi
 ## Release the resources from the Grid
 oardel $(oarstat -u -J | jq "to_entries[].value.Job_Id")
 
+public_path=$HOME/public
+folder_name=experiment_cigri_$(date +"%d_%m_%y_%Hh%M")
+
+
+mkdir ${public_path}/${folder_name}
+
+# Get the latest log
+ls $HOME/logs/log*.csv -t | head -1 | xargs -I {} mv {} $HOME/public/${folder_name}
+# Get the latest notebook
+ls $HOME/notebook*.org -t | head -1 | xargs -I {} mv {} $HOME/public/${folder_name}
