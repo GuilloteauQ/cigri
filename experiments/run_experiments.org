@@ -219,7 +219,7 @@ CTRL_CIGRI_BRANCH=controllers/MPC
 #+END_SRC
 **** Mixed Campaigns
 #+BEGIN_SRC sh :session org-session
-CTRL_CIGRI_BRANCH=controllers/mixed_campaigns_merge_gc
+CTRL_CIGRI_BRANCH=controllers/mixed_campaigns_2
 #+END_SRC
 
 #+RESULTS:
@@ -348,10 +348,10 @@ NB_JOBS=1000
 SLEEP_TIME=30
 # If the jobs need to affect the fileserver, please change the file size (in MiB).
 # Please write 0, if you do not want to use the fileserver
-FILE_SIZE=10
+FILE_SIZE=100
 # Is you campaign IO heavy (compared to other campaigns you will submit) ?
 # If unsure, set to false.
-HEAVINESS=false
+HEAVINESS=true
 
 # Description of the campaign formated to be read by the experiment launcher script
 CAMPAIGN="(${NB_JOBS},${SLEEP_TIME},${FILE_SIZE},${HEAVINESS})"
@@ -377,10 +377,16 @@ do
     base_command="${base_command} -c \"${campaign}\""
 done
 
+base_command="${base_command} &> $HOME/expe_script.log"
+
 # Executing the command
 echo "${base_command}"
 		   
 #+END_SRC
+
+#+RESULTS:
+|                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |    |    |    |    |     |        |
+| > > > > > > > > > > > > > > > > > > > > > > sh-5.0$ sh-5.0$ sh-5.0$ sh-5.0$ > > > sh-5.0$ sh-5.0$ sh-5.0$ > > > sh-5.0$ sh-5.0$ sh-5.0$ sh /home/qguilloteau/NIX/cigri/experiments/generate_report_experiment.sh --deploy-config /home/qguilloteau/big-data-hpc-g5k-expe-tools/examples/augu5te/expe_oar3_cigri_storage_tiny.yaml --cigri-branch controllers/mixed_campaigns_2 --cigri-config /home/qguilloteau/NIX/cigri/experiments/cigri.conf --ctrl-config /home/qguilloteau/ctrl_config.json -c "(1000 | 30 | 10 | -c | 30 | 100 | true)" |
 
 #+BEGIN_SRC sh :session org-session
 for c in "${CAMPAIGNS_TO_SUBMIT[@]}"
@@ -392,15 +398,23 @@ done
 
 #+RESULTS:
 |           |    |     |        |
-| > > (1000 | 30 | 100 | true)  |
-| (1000     | 30 |  10 | false) |
+| > > (1000 | 30 |  10 | false) |
+| (1000     | 30 | 100 | true)  |
 
 #+BEGIN_SRC sh :session org-session
 eval ${base_command} &
 #+END_SRC
 
 #+RESULTS:
-: [1] 18323
+: [1] 29014
+
+*** Check for progess
+You can check the progress of the experiment by executing the following code block
+
+#+BEGIN_SRC sh :session org-session
+cat $HOME/gridstat.output
+
+#+END_SRC
 
 *** Get the log file back                                         :Mandatory:
     *DO NOT FORGET TO CHANGE THE NAME OF THE DESTINATION FILE*

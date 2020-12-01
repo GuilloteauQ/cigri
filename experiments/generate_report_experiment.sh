@@ -180,11 +180,19 @@ source ~/env37/bin/activate
 ## Deploy
 python ~/big-data-hpc-g5k-expe-tools/examples/augu5te/oar_cigri_expe.py ${DEPLOY_CONFIG}
 
+echo ">> Done Deploying"
+
+sleep 10
+
 
 ## Save the names of the nodes
-CIGRI_SERVER=$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[0]')
-OAR_SERVER=$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[1]')
-STORAGE_SERVER=$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[2]')
+CIGRI_SERVER="$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[0]')"
+OAR_SERVER="$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[1]')"
+STORAGE_SERVER="$(oarstat -u -J | jq -r 'to_entries[].value.assigned_network_address[2]')"
+
+echo "CIGRI_SERVER: ${CIGRI_SERVER}"
+echo "OAR_SERVER: ${OAR_SERVER}"
+echo "STORAGE_SERVER: ${STORAGE_SERVER}"
 
 ###############################################################################
 ## Setup CiGri
@@ -195,8 +203,10 @@ cd ${BASENAME_SRC}
 # TODO: will also list the files not committed .... how big of an issue is that ?
 # We should always be using a commited version of the codebase
 # TODO: We could also print the output of git diff ?
-for file_to_copy in $(git diff master --name-only | grep -e "lib/" -e "modules/"); do
-    ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "cp ${BASENAME_SRC}/${file_to_copy} ${BASENAME_DES}/$(dirname ${file_to_copy})"
+echo ">> Copying files"
+for file_to_copy in $(git diff master --name-only | grep -e "lib/" -e "modules/")
+do
+	ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "cp ${BASENAME_SRC}/${file_to_copy} ${BASENAME_DES}/$(dirname ${file_to_copy})"
 done
 # ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/modules/runner.rb /usr/local/share/cigri/modules"
 # ssh root@${CIGRI_SERVER}  "cp $HOME/NIX/cigri/lib/cigri-control.rb /usr/local/share/cigri/lib"
@@ -226,6 +236,10 @@ then
     ssh ${STORAGE_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "sh $HOME/NIX/cigri/experiments/start_gc_fileserver.sh \"${FILE_SIZES_PATTERN}\"" &
     PID_GC=$?
 fi
+
+
+ssh ${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "sh $HOME/NIX/cigri/experiments/gridstat_checker.sh" &
+PID_GRIDSTAT=$?
 
 
 sleep 10
@@ -454,10 +468,11 @@ EOF
 )"
 
 
-if [[ "${USES_NFS}" -eq "1" ]]
-then
-    kill ${PID_GC}
-fi
+# if [[ "${USES_NFS}" -eq "1" ]]
+# then
+#     kill ${PID_GC}
+# fi
+# kill ${PID_GRIDSTAT}
 
 
 ###############################################################################
@@ -465,12 +480,16 @@ fi
 oardel $(oarstat -u -J | jq "to_entries[].value.Job_Id")
 
 public_path=$HOME/public
-folder_name=experiment_cigri_$(date +"%d_%m_%y_%Hh%M")
+folder_name="experiment_cigri_$(date +"%d_%m_%y_%Hh%M")"
 
 
 mkdir ${public_path}/${folder_name}
 
 # Get the latest log
-ls $HOME/logs/log*.csv -t | head -1 | xargs -I {} mv {} $HOME/public/${folder_name}
+ls $HOME/logs/log*.csv -t | head -1 | xargs -I {} cp {} ${public_path}/${folder_name}/
 # Get the latest notebook
-ls $HOME/notebook*.org -t | head -1 | xargs -I {} mv {} $HOME/public/${folder_name}
+ls $HOME/notebook*.org -t | head -1 | xargs -I {} cp {} ${public_path}/${folder_name}/
+
+
+rm $HOME/OAR.*
+rm $HOME/param*
