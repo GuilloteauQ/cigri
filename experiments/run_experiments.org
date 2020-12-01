@@ -1,0 +1,435 @@
+#+TITLE: LabBook
+#+AUTHOR: Quentin Guilloteau
+
+This file gather the commands for reproducing the different experiments.
+You can execute the commands by simply hitting C-c C-c in the code block.
+
+* Grid5000
+** Setup
+   The following steps only need to be executed *ONCE*
+*** Grab the images
+#+BEGIN_SRC sh :session org-session-setup
+kaenv3 -a http://public.nancy.grid5000.fr/~orichard/oar3-cigri-debian9-test.yaml
+kaenv3 -a http://public.nancy.grid5000.fr/~orichard/oar3-node-debian9-test.yaml
+#+END_SRC
+*** Create a Python environment
+#+BEGIN_SRC sh :session org-session-setup
+virtualenv -p python3.7 env37
+source ~/env37/bin/activate
+pip install execo pyyaml requests
+#+END_SRC
+*** Clone the repos
+#+BEGIN_SRC sh :session org-session-setup
+git clone https://gitlab.inria.fr/evalys/big-data-hpc-g5k-expe-tools.git
+git clone https://gitlab.inria.fr/cigri-ctrl/cigri-expe.git
+git clone https://github.com/GuilloteauQ/cigri.git
+#+END_SRC
+*** Initialize CiGri
+#+BEGIN_SRC sh :session org-session-setup
+mkdir -p $HOME/workdir -p $HOME/logs
+chmod 777 $HOME/logs
+#+END_SRC
+** Experiment Template
+*** Pick the Deployment setup                                     :Mandatory:
+**** 1 CiGri, 1 OAR, 1 Cluster (100 resources)
+#+BEGIN_SRC sh :session org-session
+DEPLOY_CONFIG=~/big-data-hpc-g5k-expe-tools/examples/augu5te/expe_cigri_oar3_tiny.yaml
+#+END_SRC
+
+#+RESULTS:
+
+**** 1 CiGri, 1 OAR, 1 Cluster (200 resources)
+#+BEGIN_SRC sh :session org-session
+DEPLOY_CONFIG=~/big-data-hpc-g5k-expe-tools/examples/augu5te/expe_cigri_oar3_tiny_200resources.yaml
+#+END_SRC
+**** 1 CiGri, 1 OAR, 1 Cluster, 1 Fileserver (100 resources)
+#+BEGIN_SRC sh :session org-session
+DEPLOY_CONFIG=~/big-data-hpc-g5k-expe-tools/examples/augu5te/expe_oar3_cigri_storage_tiny.yaml
+#+END_SRC
+
+#+RESULTS:
+
+*** Pick up the config for CiGri                                  :Mandatory:
+**** Use default config                                            :Optional:
+Change the path to the location of the CiGri config.
+#+BEGIN_SRC sh :session org-session
+CIGRI_CONFIG=~/NIX/cigri/experiments/cigri.conf
+#+END_SRC
+
+#+RESULTS:
+
+**** Custom config                                                 :Optional:
+To change *if you know what you are doing...*
+#+NAME: custom_cigri_config
+#+BEGIN_EXAMPLE conf
+# Database settings
+# TYPE may be Pg or Mysql
+DATABASE_TYPE = "Pg" 
+DATABASE_HOST = "127.0.0.1"
+DATABASE_NAME = "cigri3"
+DATABASE_USER_NAME = "cigri3"
+DATABASE_USER_PASSWORD = "cigri3"
+
+# Where is CiGri installed
+INSTALL_PATH = "/usr/local/share/cigri/"
+
+# Timeout in seconds for jobs remaining in the waiting status on the clusters
+# or in the cigri queues
+REMOTE_WAITING_TIMEOUT = "900"
+
+# How often to re-check some events before trying to fix
+AUTOFIX_DELAY = "30"
+
+# Default resources when jobs do not define otherwise
+DEFAULT_JOB_RESOURCES = "/resource_id=1"
+
+# Default walltime given to the jobs
+DEFAULT_JOB_WALLTIME = "01:00:00"
+
+# Stress factor above which a cluster is considered under stress
+# (meaning we should stop queuing jobs until the stress factor becomes
+# again acceptable). Note that a cluster under stress is not blacklisted
+# so that we can still update job statuses.
+STRESS_FACTOR="8.0"
+
+#############################################################################
+## LOGGING OPTIONS
+#############################################################################
+#File where to log (STDOUT AND STDERR are accepted as  well)
+LOG_FILE = "/tmp/cigri.log"
+# LOG_FILE = "STDERR"
+# loglevel as supported by the ruby logger (FATAL, ERROR, WARN, INFO, DEBUG)
+LOG_LEVEL = "INFO"
+# Job debugging. Set to 1 if you want to dump all submitted jobs
+LOG_JOBS = "0"
+LOG_JOBS_DIRECTORY = "/var/log/cigri_jobs"
+# Number of lines to get from the end of the stderr file of a cluster job
+# This is passed as a "tail=<STDERR_TAIL>" argument to get_file query.
+STDERR_TAIL = 5
+
+#############################################################################
+## REST CLIENT OPTIONS
+#############################################################################
+# Timeout in seconds, for all rest queries to the clusters
+REST_QUERIES_TIMEOUT="25"
+# Certificate file used for rest queries to the clusters
+# The certificate must be signed by a CA that is trusted by the OAR API of
+# the clusters.
+REST_CLIENT_CERTIFICATE_FILE="/etc/cigri/ssl/cigri.crt"
+# Key file used for rest queries to the clusters
+REST_CLIENT_KEY_FILE="/etc/cigri/ssl/cigri.key"
+# The 2 following options are there if you want to enforce security
+# by checking the validity of the clusters rest api certificates.
+# Certificate authority file
+#REST_CLIENT_CA_FILE="/etc/cigri/ssl/ca.cert"
+# Verify ssl option
+#REST_CLIENT_VERIFY_SSL="OpenSSL::SSL::VERIFY_PEER"
+
+#############################################################################
+## RUNNER OPTIONS
+#############################################################################
+# Minimum cycle duration
+# The runner sleeps this time of seconds if necessary to prevent
+# from looping too fast and let the time to clusters for jobs digestion
+RUNNER_MIN_CYCLE_DURATION = "30"
+# Default initial number of jobs to submit
+# The runner submits several jobs at a time using oar array jobs.
+# This number specifies the initial number of jobs to submit. Then,
+# the runner may decide to increase or decreseases this number.
+RUNNER_DEFAULT_INITIAL_NUMBER_OF_JOBS = "100" 
+# Increase (or decrease) the number of jobs submitted at each succesful cycle
+# by this value 
+RUNNER_TAP_INCREASE_FACTOR = "1"
+# Maximum number of jobs submitted by a runner cycle (maximum
+# array job size)
+RUNNER_TAP_INCREASE_MAX = "500"
+# Grace period for a closed tap: when a tap is closed, it is maybe just
+# beacuse the cluster needs some time to pass the jobs to the running state.
+# So, we don't directly try the next campaign, but wait a bit.
+# The value is a number of seconds.
+RUNNER_TAP_GRACE_PERIOD = "60"
+
+#############################################################################
+## API OPTIONS
+#############################################################################
+# Header variable where username is given to the API (configured in apache 
+# configuration)
+API_HEADER_USERNAME="HTTP_X_CIGRI_USER"
+
+#############################################################################
+## NOTIFICATION OPTIONS
+#############################################################################
+#### MAIL notifications ####
+# Smtp server
+# If this variable is not set, mail notifications are disabled
+#NOTIFICATIONS_SMTP_SERVER="smtp.imag.fr"
+# Port of the smtp server
+#NOTIFICATIONS_SMTP_PORT="25"
+# From identity
+#NOTIFICATIONS_SMTP_FROM="cigri@please.configure.me"
+# Subject tag
+# This is a small string that will be prefixed to the subject
+#NOTIFICATIONS_SMTP_SUBJECT_TAG="[CIGRI]"
+#### XMPP notifications ####
+# Xmpp server
+# If this variable is not set, xmpp notifications are disabled
+#NOTIFICATIONS_XMPP_SERVER="talk.google.com"
+# Port of the xmpp server
+#NOTIFICATIONS_XMPP_PORT="5222"
+# Xmpp identity
+#NOTIFICATIONS_XMPP_IDENTITY=""
+# Xmpp password
+#NOTIFICATIONS_XMPP_PASSWORD=""
+
+#############################################################################
+## MISC OPTIONS
+#############################################################################
+#
+# Minimum duration in seconds between two updates of the grid_usage table
+# This table is maintained only for making statistics and informations to the 
+# users. Set to 0 to disable.
+GRID_USAGE_UPDATE_PERIOD="60"
+# Dirty wait for maximizing chances of gridusage processes synchro
+# Ignored if GRID_USAGE_UPDATE_PERIOD is set to 0
+GRID_USAGE_SYNC_TIME="10"
+#+END_EXAMPLE
+
+*DONT FORGET TO EXECUTE THE FOLLOWING CODE BLOCK*
+#+BEGIN_SRC sh :session org-session :var custom_cigri_config=custom_cigri_config
+CIGRI_CONFIG=~/custom_cigri.conf
+echo "${custom_cigri_config}" > ${CIGRI_CONFIG} && echo "CiGri Config set up !" || echo "Could not set CiGri config"
+#+END_SRC
+
+#+RESULTS:
+|                                                                                                                                                                                                                                                                                                         |
+| > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > > sh-5.0$ sh-5.0$ CiGri Config set up ! |
+
+*** Pick the Controller to use                                    :Mandatory:
+**** P
+#+BEGIN_SRC sh :session org-session
+CTRL_CIGRI_BRANCH=controllers/P
+#+END_SRC
+**** PI
+#+BEGIN_SRC sh :session org-session
+CTRL_CIGRI_BRANCH=controllers/PI
+#+END_SRC
+**** MPC
+#+BEGIN_SRC sh :session org-session
+CTRL_CIGRI_BRANCH=controllers/MPC
+#+END_SRC
+**** Mixed Campaigns
+#+BEGIN_SRC sh :session org-session
+CTRL_CIGRI_BRANCH=controllers/mixed_campaigns_2
+#+END_SRC
+
+#+RESULTS:
+
+*** Pick the Setup for the Controller                             :Mandatory:
+**** Init (don't forget me :( ... )                               :Mandatory:
+We set the path to the config file to the controller
+You can change the path as you pleased.
+Note that you cannot put it in folders like /tmp
+#+BEGIN_SRC sh :session org-session
+CTRLR_CONFIG=~/ctrl_config.json
+#+END_SRC
+
+#+RESULTS:
+
+**** Configuration of the Controller                              :Mandatory:
+***** P
+****** JSON file
+Change the JSON file below.
+#+NAME: config_p_controller
+#+BEGIN_EXAMPLE json
+{
+    nb_jobs: 0,
+    reference: 10,
+    kp: 0.1
+    
+}
+#+END_EXAMPLE
+****** Save the config
+#+BEGIN_SRC sh :session org-session :var config=config_p_controller
+echo "${config}" > ${CTRLR_CONFIG} && echo "Controller config set up !" || echo "Error while setting up the controller config"
+#+END_SRC
+***** PI
+****** JSON file
+Change the JSON file below.
+#+NAME: config_pi_controller
+#+BEGIN_EXAMPLE json
+{
+    nb_jobs: 0,
+    reference: 10,
+    kp: 0.1,
+    ki: 0.1
+    
+}
+#+END_EXAMPLE
+****** Save the config
+#+BEGIN_SRC sh :session org-session :var config=config_pi_controller
+echo "${config}" > ${CTRLR_CONFIG} && echo "Controller config set up !" || echo "Error while setting up the controller config"
+#+END_SRC
+***** MPC
+****** JSON file
+Change the JSON file below.
+#+NAME: config_mpc_controller
+#+BEGIN_EXAMPLE json
+{
+    "nb_jobs": 0,
+    "x_est": [0, 0, 1e-2, 0, 0, 1e-1],
+    "q_ref": 30,
+    "r_ref": 500,
+    "f_ref": 100,
+    "Q": [[1e2,0, 0,0,0,0],
+          [0,1e2, 0, 0, 0, 0],
+          [0, 0, 1e-4, 0, 0, 0],
+          [0, 0, 0, 1e2, 0, 0],
+          [0, 0, 0, 0, 1e1, 0],
+          [0, 0, 0, 0, 0, 0]],
+    "R": 50,
+    "P":[[1e2, 0, 0, 0, 0, 0],
+         [0, 1e2, 0, 0, 0, 0],
+         [0, 0, 0, 0, 0, 0],
+         [0, 0, 0, 1e2, 0, 0],
+         [0, 0, 0, 0, 1e1, 0],
+         [0, 0, 0, 0, 0, 1e-1]],
+    "H": [[1, 0, 0, 0, 0, 0],
+          [0, 1, 0, 0, 0, 0],
+          [0, 0, 0, 0, 1, 0]]
+}
+#+END_EXAMPLE
+****** Save the config
+#+BEGIN_SRC sh :session org-session :var config=config_mpc_controller
+CTRLR_CONFIG=~/ctrl_config.json
+echo "${config}" > ${CTRLR_CONFIG} && echo "Controller config set up !" || echo "Error while setting up the controller config"
+#+END_SRC
+***** Mixed Campaigns
+****** JSON file
+Change the JSON file below.
+#+NAME: config_mixed_c
+#+BEGIN_EXAMPLE
+{
+    "nb_jobs": 0,
+    "percentage": 100,
+    "kp_jobs": 1,
+    "kp_percentage": 0,
+    "ref_stress_factor": 3
+}
+#+END_EXAMPLE
+****** Save the config
+#+BEGIN_SRC sh :session org-session :var ctrl_config=config_mixed_c
+echo "${ctrl_config}" > ${CTRLR_CONFIG} && echo "Controller config set up !" || echo "Error while setting up the controller config"
+#+END_SRC
+
+#+RESULTS:
+|                                                |
+| > > > > > > sh-5.0$ Controller config set up ! |
+
+*** Campaign to submit                                            :Mandatory:
+**** Init (don't forget me :( ... )                               :Mandatory:
+This array is required so we can submit multiple campaigns to the
+experiment launcher script
+#+BEGIN_SRC sh :session org-session
+CAMPAIGNS_TO_SUBMIT=()
+#+END_SRC
+
+#+RESULTS:
+
+**** Description of the campaign                                  :Mandatory:
+In this section we describe the campaign to submit.
+Please change the different values and then submit the code block.
+
+*If you need to submit multiple campaigns, execute the code block multiple times.*
+
+#+BEGIN_SRC sh :session org-session
+# Nb of jobs to submit
+NB_JOBS=1000
+# Exec time of a job in seconds
+SLEEP_TIME=30
+# If the jobs need to affect the fileserver, please change the file size (in MiB).
+# Please write 0, if you do not want to use the fileserver
+FILE_SIZE=100
+# Is you campaign IO heavy (compared to other campaigns you will submit) ?
+# If unsure, set to false.
+HEAVINESS=true
+
+# Description of the campaign formated to be read by the experiment launcher script
+CAMPAIGN="(${NB_JOBS},${SLEEP_TIME},${FILE_SIZE},${HEAVINESS})"
+# Adding the campaign to the list of campaigns to submit
+CAMPAIGNS_TO_SUBMIT+=(${CAMPAIGN})
+#+END_SRC
+
+#+RESULTS:
+
+*** Submit the experiment
+#+BEGIN_SRC sh :session org-session :var ctrl_config=config_mpc_controller
+PATH_TO_SCRIPT=~/NIX/cigri/experiments/generate_report_experiment.sh
+
+# Base of the command
+base_command="sh ${PATH_TO_SCRIPT} --deploy-config ${DEPLOY_CONFIG} \
+                   --cigri-branch ${CTRL_CIGRI_BRANCH} \
+		   --cigri-config ${CIGRI_CONFIG} \
+		   --ctrl-config-raw \"${ctrl_config}\""
+base_command="sh ${PATH_TO_SCRIPT} --deploy-config ${DEPLOY_CONFIG} --cigri-branch ${CTRL_CIGRI_BRANCH} --cigri-config ${CIGRI_CONFIG} --ctrl-config ${CTRLR_CONFIG}"
+# Adding the campaigns to submit
+for campaign in "${CAMPAIGNS_TO_SUBMIT[@]}"
+do
+    base_command="${base_command} -c \"${campaign}\""
+done
+
+base_command="${base_command} &> $HOME/expe_script.log"
+
+# Executing the command
+echo "${base_command}"
+		   
+#+END_SRC
+
+#+RESULTS:
+|                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |    |    |    |    |     |        |
+| > > > > > > > > > > > > > > > > > > > > > > sh-5.0$ sh-5.0$ sh-5.0$ sh-5.0$ > > > sh-5.0$ sh-5.0$ sh-5.0$ > > > sh-5.0$ sh-5.0$ sh-5.0$ sh /home/qguilloteau/NIX/cigri/experiments/generate_report_experiment.sh --deploy-config /home/qguilloteau/big-data-hpc-g5k-expe-tools/examples/augu5te/expe_oar3_cigri_storage_tiny.yaml --cigri-branch controllers/mixed_campaigns_2 --cigri-config /home/qguilloteau/NIX/cigri/experiments/cigri.conf --ctrl-config /home/qguilloteau/ctrl_config.json -c "(1000 | 30 | 10 | -c | 30 | 100 | true)" |
+
+#+BEGIN_SRC sh :session org-session
+for c in "${CAMPAIGNS_TO_SUBMIT[@]}"
+do
+    echo "$c"
+done
+
+#+END_SRC
+
+#+RESULTS:
+|           |    |     |        |
+| > > (1000 | 30 |  10 | false) |
+| (1000     | 30 | 100 | true)  |
+
+#+BEGIN_SRC sh :session org-session
+eval ${base_command} &
+#+END_SRC
+
+#+RESULTS:
+: [1] 29014
+
+*** Check for progess
+You can check the progress of the experiment by executing the following code block
+
+#+BEGIN_SRC sh :session org-session
+cat $HOME/gridstat.output
+
+#+END_SRC
+
+*** Get the log file back                                         :Mandatory:
+    *DO NOT FORGET TO CHANGE THE NAME OF THE DESTINATION FILE*
+#+BEGIN_SRC sh :exports code
+public_path=$HOME/public
+folder_name=experiment_cigri_$(date +"%d_%m_%y")
+
+
+mkdir ${public_path}/${folder_name}
+
+# Get the latest log
+ls $HOME/logs/log*.csv -t | head -1 | xargs -I {} cp {} $HOME/public/${folder_name}
+# Get the latest notebook
+ls $HOME/notebook*.org -t | head -1 | xargs -I {} cp {} $HOME/public/${folder_name}
+#+END_SRC
+
+#+RESULTS:
+
