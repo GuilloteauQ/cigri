@@ -244,6 +244,11 @@ PID_GRIDSTAT=$?
 
 sleep 10
 
+ssh ${OAR_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "sh $HOME/NIX/cigri/experiments/cluster_profile.sh" &
+
+# exit 0
+
+
 ###############################################################################
 ## Submit a Campaign
 
@@ -252,6 +257,7 @@ for campaign_file in ${CAMPAIGN_NAMES_ARRAY[@]}; do
 done
 
 sleep 10
+
 
 
 ###############################################################################

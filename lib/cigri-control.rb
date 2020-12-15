@@ -12,33 +12,27 @@ class Controller
     config_data = JSON.parse(File.read(config_file))
     @nb_jobs = config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
     @percentage = config_data["percentage"].nil? ? 50 : config_data["percentage"].to_i
-    @reference = config_data["reference"].nil? ? 10 : config_data["reference"].to_i
-	@error = 0
-	@logfile = logfile # TODO: May need to create the file if does not exist
-	@cluster = cluster
-    @kp_jobs = config_data["kp_jobs"].nil? ? 1 : config_data["kp_jobs"].to_f
+    @reference_load = config_data["reference_load"].nil? ? 10 : config_data["reference_load"].to_i
+    @reference_wait = config_data["reference_waiting_queue"].nil? ? 10 : config_data["reference_waiting_queue"].to_i
+    @error_wait= 0
+    @error_load = 0
+    @logfile = logfile # TODO: May need to create the file if does not exist
+    @cluster = cluster
+    @kp_wait= config_data["kp_jobs_waiting"].nil? ? 1 : config_data["kp_jobs_waiting"].to_f
+    @kp_load = config_data["kp_jobs_load"].nil? ? 1 : config_data["kp_jobs_load"].to_f
     @kp_percentage = config_data["kp_percentage"].nil? ? 1 : config_data["kp_percentage"].to_f
-    @reference_stress_factor = config_data["ref_stress_factor"].nil? ? 1 : config_data["ref_stress_factor"].to_f
-    @has_running_campaigns = true
-    @threshold = config_data["threshold"].nil? ? 1 : config_data["threshold"].to_f
-  end
-
-  def update_has_running_campaigns()
-    @has_running_campaigns = (@has_running_campaigns or self.get_running_jobs() + self.get_waiting_jobs() > 0)
   end
 
   def update_controlled_value()
     print(">> updating controlled values (previous values: (#{@nb_jobs}, #{@percentage}))\n")
-    if @has_running_campaigns
-      print("error: #{@error}\n")
-      if (@error).abs() >= @threshold
-        @nb_jobs = bound_nb_jobs(@nb_jobs + p_controller(@error, @kp_jobs))
-      elsif @nb_jobs > 0
-        # If we change the percentage when there is no job, this means
-        # that we are regulating the load of an empty cluster...
-        # So we make sure this does not happen
-        @percentage = bound_percentage(@percentage + p_controller(@error, @kp_percentage))
-      end
+    nb_jobs_load = bound_nb_jobs(@nb_jobs + p_controller(@error_load, @kp_load))
+    nb_jobs_wait = bound_nb_jobs(@nb_jobs + p_controller(@error_wait, @kp_wait))
+    @nb_jobs = min(nb_jobs_load, nb_jobs_wait)
+    if @nb_jobs > 0
+      # If we change the percentage when there is no job, this means
+      # that we are regulating the load of an empty cluster...
+      # So we make sure this does not happen
+      @percentage = bound_percentage(@percentage + p_controller(@error_load, @kp_percentage))
     end
     print("<< updated controlled values (new values: (#{@nb_jobs}, #{@percentage}))\n")
   end
@@ -52,31 +46,26 @@ class Controller
     loadavg_per_sensor[0][:mn1]
   end
 
-  def update_error()
-    @error = @reference_stress_factor - self.get_fileserver_load()
+  def update_errors()
+    @error_load = @reference_load - self.get_fileserver_load()
+    @error_wait = @reference_wait - self.get_waiting_jobs()
   end
 
   def log()
-	file = File.open(@logfile, "a+")
-        file << "#{Time.now.to_i}, #{@nb_jobs}, #{@percentage}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_fileserver_load}, #{self.get_cluster_load}, #{@has_running_campaigns}\n"
+    file = File.open(@logfile, "a+")
+    file << "#{Time.now.to_i}, #{@nb_jobs}, #{@percentage}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_fileserver_load}\n"
     file.close
   end
 
   def get_running_jobs()
-	cluster_jobs = @cluster.get_jobs()
+    cluster_jobs = @cluster.get_jobs()
     nb_running_jobs = cluster_jobs.select{|j| j["state"] == "Running" or j["state"] == "Finishing" or j["state"] == "Launching"}.length
-    # if nb_running_jobs > 0
-    #   @has_running_campaigns = true
-    # end
     nb_running_jobs
   end
 
   def get_waiting_jobs()
-	cluster_jobs = @cluster.get_jobs()
+    cluster_jobs = @cluster.get_jobs()
     nb_waiting_jobs = cluster_jobs.select{|j| j["state"] == "Waiting"}.length
-    # if nb_waiting_jobs > 0
-    #   @has_running_campaigns = true
-    # end
     nb_waiting_jobs
   end
 
@@ -100,6 +89,14 @@ end
 
 def p_controller(error, k)
   k * error
+end
+
+def min(x, y)
+  if x < y
+    x
+  else
+    y
+  end
 end
 
 

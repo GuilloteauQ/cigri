@@ -256,7 +256,7 @@ while true do
     jobs.remove_blacklisted(cluster.id)
 
     controller.log()
-    controller.update_error()
+    controller.update_errors()
     controller.update_controlled_value()
 
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
