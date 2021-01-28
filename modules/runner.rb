@@ -257,8 +257,12 @@ while true do
 
     controller.log()
 
+    nb_jobs = controller.get_nb_jobs()
+
+    print "NB_JOBS: #{nb_jobs}\n"
+
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
-    if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps, controller.get_nb_jobs()) > 0 # if the tap is open
+    if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps, nb_jobs) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
