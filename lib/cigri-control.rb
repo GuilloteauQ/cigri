@@ -67,18 +67,23 @@ class Controller
 
   def get_perf()
     print "Getting perf\n"
-    running_jobs = 0
-    # running_jobs = self.get_running_jobs()
+    # running_jobs = 0
+    rmax = 10
+    running_jobs = self.get_running_jobs()
     fileserver_load = self.get_fileserver_load()
     distance_load = @reference - fileserver_load
+    f_max = 8
+    f_M = (@reference > (@reference - f_max).abs) ? @refrence : (@reference - f_max).abs
+    return 0.3 * (rmax - running_jobs).abs / rmax + 0.7 * (@reference - fileserver_load).abs / f_M
+
     # [-distance_load, running_jobs]
-    -distance_load
+    # -distance_load
   end
 
   def get_nb_jobs()
     print "get_nb_job\n"
     # Look if we need to scan
-    if @done_scanning && (@reference - self.get_fileserver_load()).abs > @threshold then
+    if @done_scanning && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
       @need_to_scan = true
       @done_scanning = false
       @is_champion_running = false
@@ -87,23 +92,23 @@ class Controller
     if @is_champion_running && !@need_to_scan then
       print "Champion Running\n"
       return @slices[@champion]
-    #end
+    end
 
-    elsif @need_to_scan && @done_scanning then
+    if @need_to_scan && @done_scanning then
       print "Done Scanning\n"
       # We look at all the perfs form all the slices
       # and chose the champion
       @perf_slices[@iteration - 1] = self.get_perf()
       index = 0
       max = @perf_slices[index]
-      for i in 1..@slices.length do
+      for i in 1..(@slices.length - 1) do
         if max < @perf_slices[i] then # only look the load part
         # if max[0] < @perf_slices[i][0] then # only look the load part
           index = i
           max = @perf_slices[i]
         # elsif max[0] == @perf_slices[i][0] and max[1] < @perf_slices[i][1] # if (somehow) they have the same load, take the one that yields the most number of jobs
-        #   index = i
-        #   max = @perf_slices[i]
+          # index = i
+          # max = @perf_slices[i]
         end
       end
       @iteration = 0
@@ -111,15 +116,15 @@ class Controller
       @is_champion_running = true
       @need_to_scan = false # TODO:  vraiment ou pas ?
       return @slices[@champion]
-    #end
-    else
-    # if @need_to_scan && ! @done_scanning then
+    end
+
+    if @need_to_scan && ! @done_scanning then
       print "scanning\n"
       if @iteration != 0 then
         @perf_slices[@iteration - 1] = self.get_perf()
       end
       @iteration = @iteration + 1
-      if @iteration > @slices.length then
+      if @iteration == @slices.length then
         @done_scanning = true
       end
       print "ITERATION: #{@iteration}\n"
