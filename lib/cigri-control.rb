@@ -27,6 +27,7 @@ class Controller
     @done_scanning = false
     @need_to_scan = true
     @iteration = 0
+    @load_before_submission = -1
   end
 
   def get_fileserver_load()
@@ -75,6 +76,39 @@ class Controller
     return 0.3 * (rmax - running_jobs).abs / rmax + 0.7 * (@reference - fileserver_load).abs / f_M
   end
 
+  def get_nb_jobs_champion()
+    return @slices[@champion]
+  end
+
+  def scanning_phase()
+    if @iteration != 0 then
+      @perf_slices[@iteration - 1] = self.get_perf()
+    end
+    @iteration = @iteration + 1
+    if @iteration == @slices.length then
+      @done_scanning = true
+    end
+    return @slices[@iteration - 1]
+  end
+
+  def champion_selection()
+    # We look at all the perfs form all the slices
+    # and chose the champion
+    @perf_slices[@iteration - 1] = self.get_perf()
+    index = 0
+    max = @perf_slices[index]
+    for i in 1..(@slices.length - 1) do
+      if max < @perf_slices[i] then # only look the load part
+        index = i
+        max = @perf_slices[i]
+      end
+    end
+    @iteration = 0
+    @champion = index
+    @is_champion_running = true
+    @need_to_scan = false # TODO:  vraiment ou pas ?
+  end
+
   def get_nb_jobs()
     # Look if we need to scan
     if @done_scanning && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
@@ -84,37 +118,16 @@ class Controller
     end
 
     if @is_champion_running && !@need_to_scan then
-      return @slices[@champion]
+      return self.get_nb_jobs_champion()
     end
 
     if @need_to_scan && @done_scanning then
-      # We look at all the perfs form all the slices
-      # and chose the champion
-      @perf_slices[@iteration - 1] = self.get_perf()
-      index = 0
-      max = @perf_slices[index]
-      for i in 1..(@slices.length - 1) do
-        if max < @perf_slices[i] then # only look the load part
-          index = i
-          max = @perf_slices[i]
-        end
-      end
-      @iteration = 0
-      @champion = index
-      @is_champion_running = true
-      @need_to_scan = false # TODO:  vraiment ou pas ?
-      return @slices[@champion]
+      self.champion_selection()
+      return self.get_nb_jobs_champion()
     end
 
     if @need_to_scan && ! @done_scanning then
-      if @iteration != 0 then
-        @perf_slices[@iteration - 1] = self.get_perf()
-      end
-      @iteration = @iteration + 1
-      if @iteration == @slices.length then
-        @done_scanning = true
-      end
-      return @slices[@iteration - 1]
+      return self.scanning_phase()
     end
   end
 end
