@@ -66,8 +66,6 @@ class Controller
   end
 
   def get_perf()
-    print "Getting perf\n"
-    # running_jobs = 0
     rmax = 10
     running_jobs = self.get_running_jobs()
     fileserver_load = self.get_fileserver_load()
@@ -75,13 +73,9 @@ class Controller
     f_max = 8
     f_M = (@reference > (@reference - f_max).abs) ? @refrence : (@reference - f_max).abs
     return 0.3 * (rmax - running_jobs).abs / rmax + 0.7 * (@reference - fileserver_load).abs / f_M
-
-    # [-distance_load, running_jobs]
-    # -distance_load
   end
 
   def get_nb_jobs()
-    print "get_nb_job\n"
     # Look if we need to scan
     if @done_scanning && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
       @need_to_scan = true
@@ -90,12 +84,10 @@ class Controller
     end
 
     if @is_champion_running && !@need_to_scan then
-      print "Champion Running\n"
       return @slices[@champion]
     end
 
     if @need_to_scan && @done_scanning then
-      print "Done Scanning\n"
       # We look at all the perfs form all the slices
       # and chose the champion
       @perf_slices[@iteration - 1] = self.get_perf()
@@ -103,12 +95,8 @@ class Controller
       max = @perf_slices[index]
       for i in 1..(@slices.length - 1) do
         if max < @perf_slices[i] then # only look the load part
-        # if max[0] < @perf_slices[i][0] then # only look the load part
           index = i
           max = @perf_slices[i]
-        # elsif max[0] == @perf_slices[i][0] and max[1] < @perf_slices[i][1] # if (somehow) they have the same load, take the one that yields the most number of jobs
-          # index = i
-          # max = @perf_slices[i]
         end
       end
       @iteration = 0
@@ -119,7 +107,6 @@ class Controller
     end
 
     if @need_to_scan && ! @done_scanning then
-      print "scanning\n"
       if @iteration != 0 then
         @perf_slices[@iteration - 1] = self.get_perf()
       end
@@ -127,44 +114,7 @@ class Controller
       if @iteration == @slices.length then
         @done_scanning = true
       end
-      print "ITERATION: #{@iteration}\n"
       return @slices[@iteration - 1]
     end
   end
-
-  # def get_nb_jobs()
-  #   print("iteration: #{@iteration}\nis champion running: #{@is_champion_running}\nchampion: #{@champion}\nchampion iter: #{@champion_iteration}\n")
-  #   @is_champion_running = @is_champion_running && @champion_iteration < @max_champion_iterations
-  #   if @is_champion_running then
-  #     @champion_iteration = @champion_iteration + 1
-  #     return @slices[@champion]
-  #   elsif @iteration == @slices.length then
-  #     @perf_slices[@iteration - 1] = self.get_perf()
-  #     index = 0
-  #     max = @perf_slices[index]
-  #     for i in 1..@slices.length - 1 do
-  #       if max[0] < @perf_slices[i][0] then
-  #         index = i
-  #         max = @perf_slices[i]
-  #       elsif max[0] == @perf_slices[i][0] and max[1] < @perf_slices[i][1]
-  #         index = i
-  #         max = @perf_slices[i]
-  #       end
-  #     end
-  #     @champion = index
-  #     @iteration = 0
-  #     @champion_iteration = 0
-  #     @is_champion_running = true
-  #     return @slices[@champion]
-  #   else
-  #     @champion = -1
-  #     if @iteration != 0 then
-  #       # not the first iter
-  #       @perf_slices[@iteration - 1] = self.get_perf()
-  #     end
-  #     @iteration = @iteration + 1
-  #     return @slices[@iteration - 1]
-  #   end
-  # end
-
 end
