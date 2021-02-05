@@ -64,6 +64,7 @@ while true do
   current_jobs.get_submitted(cluster.id)
   current_jobs.get_running(cluster.id)
   current_jobs.to_jobs
+  # print "jobs: #{current_jobs.jobs.length}\n"
 
   # init taps
   cluster.reset_taps
