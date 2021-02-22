@@ -12,7 +12,7 @@ class Controller
     # config_data = JSON.parse(File.read(config_file))
     @nb_jobs = 0 #config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
     @reference = 3
-    @threshold = 3
+    @threshold = 1
     @error = 0
 
     @logfile = logfile # TODO: May need to create the file if does not exist
@@ -34,6 +34,7 @@ class Controller
 
     @prologue_starting = false
     @prologue_done = false
+    @wait = true
   end
 
   def get_fileserver_load()
@@ -73,7 +74,7 @@ class Controller
   end
 
   def get_perf(max_load, max_running_jobs)
-    rmax = 10
+    rmax = 100
     distance_load = @reference - max_load
     f_max = 8
     f_M = (@reference > (@reference - f_max).abs) ? @refrence : (@reference - f_max).abs
@@ -169,22 +170,29 @@ class Controller
     print "Has launching jobs: #{@cluster.has_launching_jobs?}\n"
     # if @cluster.has_launching_jobs? then
       # Look if we need to scan
-      if @iteration == -1 && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
+      if @iteration > 5 && @is_champion_running && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
         @need_to_scan = true
         @is_champion_running = false
         @champion = -1
+        @iteration = -1
       end
 
       if @is_champion_running && !@need_to_scan then
         print ">>> Champion Running\n"
-        return self.get_nb_jobs_champion()
+        @wait = !@wait
+        if @wait then
+          return 0
+        else
+          @iteration = @iteration + 1
+          return self.get_nb_jobs_champion()
+        end
       end
 
       if @iteration < @slices.length && @need_to_scan then
         print ">>> Scanning (#{@iteration}/#{@slices.length})\n"
-        return self.scanning_phase()
+        nb = self.scanning_phase()
+        return nb
       end
-
       if @need_to_scan && @iteration >= @slices.length then
         print ">>> Selecting the champion\n"
         self.champion_selection()
