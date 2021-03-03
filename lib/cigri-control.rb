@@ -8,7 +8,7 @@ class Controller
   # It is possible to add others attributes:
   #   - the cumulated error
   #   - some constant matrices
-  def initialize(logfile, cluster, config_file)
+  def initialize(logfile, cluster, config_file, dt)
     # config_data = JSON.parse(File.read(config_file))
     @nb_jobs = 0 #config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
     @reference = 3
@@ -28,9 +28,11 @@ class Controller
     @need_to_scan = true
     @iteration = -1
 
+    @time_at_start_submission = Time.now.to_i
     @load_before_submission = -1
     @current_max_load = -1
-
+    @alpha = Math.exp(-5/60)
+    @dt = dt / 5
 
     @prologue_starting = false
     @prologue_done = false
@@ -46,6 +48,31 @@ class Controller
     loadavg_per_sensor[0][:mn1]
   end
 
+  def read_loadavg_per_sensor_for_timeslice(start_time, end_time, sensor_id)
+    filename = "/tmp/loadavg_storage_server#{sensor_id}"
+    cmd_result = `awk '{ if (!($1 < #{start_time}) && !($1 > #{end_time})) print $1 " " $2 }' #{filename}`
+    data = Array.new
+    for c in cmd_result.split("\n") do
+      arr = c.split(" ")
+      data.push({:time => arr[0].to_i, :load => arr[1].to_f})
+    end
+    return data
+  end
+
+  def get_time_start_of_writing_phase(submission_time, sensor_id)
+    data = self.read_loadavg_per_sensor_for_timeslice(submission_time, Time.now.to_i, sensor_id)
+
+    n = data.length
+
+    diffs = Array.new
+
+    for i in 1..n do
+      e = data[i]
+      e[:load] = e[:load] - data[i - 1][:load]
+      diffs.push(e)
+    end
+    return diffs.max_by {|e| e[:load] }
+  end
 
   def log()
     file = File.open(@logfile, "a+")
@@ -73,9 +100,27 @@ class Controller
     @error
   end
 
-  def get_perf(max_load, max_running_jobs)
+  def N_estimator(fmax, f0, tr)
+    return (fmax - f0 * @alpha**tr) / ( 1 - @alpha**tr)
+  end
+
+  def compute_limit_load(estimated_N, tr)
+    return estimated_N * (1 - @alpha**tr) / (1 - @alpha ** @dt)
+  end
+
+  def get_perf(data, max_running_jobs)
+    max_load = data.max_by { |e| e[:load]}
+    f_max = max_load[:load]
+    t_max = max_load[:time]
+    start_writing_phase = self.get_time_start_of_writing_phase(@time_at_start_submission, 0)
+
+    rising_time = (t_max - start_writing_phase[:time]) / 5 # div by 5 because the load is updated every 5 secs
+    estimated_N = self.N_estimator(f_max, @load_before_submission, rising_time)
+    limit_load_for_sub_size = self.compute_limit_load(estimated_N, rising_time) # + @load_before_submission
+
     rmax = 100
-    distance_load = @reference - max_load
+    # distance_load = @reference - max_load
+    distance_load = @reference - limit_load_for_sub_size
     f_max = 8
     f_M = (@reference > (@reference - f_max).abs) ? @refrence : (@reference - f_max).abs
     return 0.3 * (rmax - max_running_jobs).abs / rmax + 0.7 * (@reference - max_load).abs / f_M
@@ -116,7 +161,10 @@ class Controller
     nb_jobs_still_running = current_jobs.jobs.length
 
     if current_load - @load_before_submission < 0.3 && nb_jobs_still_running == 0 then
-      @perf_slices[@iteration] = self.get_perf(@current_max_load, @current_max_running)
+      load_evolution_during_submission = self.read_loadavg_per_sensor_for_timeslice(@time_at_start_submission, Time.now.to_i, 0)
+      # @current_max_load = load_evolution_during_submission.max_by { |e| e[:load] }[:load]
+      # @perf_slices[@iteration] = self.get_perf(@current_max_load, @current_max_running)
+      @perf_slices[@iteration] = self.get_perf(load_evolution_during_submission, @current_max_running)
       return true
     end
     return false
@@ -130,6 +178,7 @@ class Controller
       self.reset_max_load()
       print "Submitting #{@slices[@iteration]} jobs\n"
       @nb_jobs = (@iteration < @slices.length) ? @slices[@iteration] : 0
+      @time_at_start_submission = Time.now.to_i
     else
       print "Waiting for back to normal: Load: #{@load_before_submission}\n"
       @nb_jobs = 0

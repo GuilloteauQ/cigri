@@ -53,7 +53,7 @@ logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
 
 # Define the controller object
-controller = Controller.new("/tmp/log.txt", cluster, config.get('CTRL_CIGRI_CONFIG_FILE'))#"/srv/cigri/ctrl_cigri_conf.json")
+controller = Controller.new("/tmp/log.txt", cluster, config.get('CTRL_CIGRI_CONFIG_FILE'), MIN_CYCLE_DURATION)#"/srv/cigri/ctrl_cigri_conf.json")
 
 while true do
 
