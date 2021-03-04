@@ -33,6 +33,7 @@ class Controller
     @current_max_load = -1
     @alpha = Math.exp(-5/60)
     @dt = dt / 5
+    print "dt: #{@dt}\n"
 
     @prologue_starting = false
     @prologue_done = false
@@ -129,7 +130,9 @@ class Controller
     end
 
     rising_time = (t_max - start_writing_phase[:time]) / 5 # div by 5 because the load is updated every 5 secs
+    print "Rising time: #{rising_time}\n"
     estimated_N = self.N_estimator(f_max, @load_before_submission, rising_time)
+    print "Est. N : #{estimated_N}\n"
     limit_load_for_sub_size = self.compute_limit_load(estimated_N, rising_time) # + @load_before_submission
     print "limit load: #{limit_load_for_sub_size}\n"
 
@@ -137,8 +140,10 @@ class Controller
     # distance_load = @reference - max_load
     distance_load = @reference - limit_load_for_sub_size
     max_f_config = 8
-    f_M = (@reference > (@reference - max_f_config).abs) ? @refrence : (@reference - max_f_config).abs
-    return 0.3 * (rmax - max_running_jobs).abs / rmax + 0.7 * (@reference - limit_load_for_sub_size).abs / f_M
+    f_M = (@reference > (@reference - max_f_config).abs) ? @reference : (@reference - max_f_config).abs
+    print "f_M: #{f_M}\n"
+    alpha = 0
+    return  alpha * (rmax - max_running_jobs).abs / rmax + (1 - alpha) * (@reference - limit_load_for_sub_size).abs / f_M
   end
 
   def get_nb_jobs_champion()
@@ -236,7 +241,7 @@ class Controller
     print "Has launching jobs: #{@cluster.has_launching_jobs?}\n"
     # if @cluster.has_launching_jobs? then
       # Look if we need to scan
-      if @iteration > 5 && @is_champion_running && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
+      if @iteration > 5000 && @is_champion_running && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
         @need_to_scan = true
         @is_champion_running = false
         @champion = -1
