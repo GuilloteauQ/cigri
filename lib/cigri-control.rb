@@ -50,13 +50,18 @@ class Controller
 
   def read_loadavg_per_sensor_for_timeslice(start_time, end_time, sensor_id)
     filename = "/tmp/loadavg_storage_server#{sensor_id}"
-    cmd_result = `awk '{ if (!($1 < #{start_time}) && !($1 > #{end_time})) print $1 " " $2 }' #{filename}`
+    # cmd_result = `awk '{ if (!($1 < #{start_time}) && !($1 > #{end_time})) print $1 " " $2 }' #{filename}`
+    cmd_result = `cut -f 1-2 -d ' ' #{filename}`
     data = Array.new
     for c in cmd_result.split("\n") do
       arr = c.split(" ")
-      data.push({:time => arr[0].to_i, :load => arr[1].to_f})
+      time = arr[0].to_i
+      load_value = arr[1].to_i
+      if time >= start_time && time <= end_time then
+        data.push({:time => arr[0].to_i, :load => arr[1].to_f})
+      end
     end
-    print "data: #{data}\n")
+    print ("data: #{data}\n")
     return data
   end
 
@@ -71,7 +76,7 @@ class Controller
       return nil
     end
 
-    for i in 1..n do
+    for i in 1..(n - 1) do
       e = data[i]
       e[:load] = e[:load] - data[i - 1][:load]
       diffs.push(e)
@@ -130,9 +135,9 @@ class Controller
     rmax = 100
     # distance_load = @reference - max_load
     distance_load = @reference - limit_load_for_sub_size
-    f_max = 8
-    f_M = (@reference > (@reference - f_max).abs) ? @refrence : (@reference - f_max).abs
-    return 0.3 * (rmax - max_running_jobs).abs / rmax + 0.7 * (@reference - max_load).abs / f_M
+    max_f_config = 8
+    f_M = (@reference > (@reference - max_f_config).abs) ? @refrence : (@reference - max_f_config).abs
+    return 0.3 * (rmax - max_running_jobs).abs / rmax + 0.7 * (@reference - limit_load_for_sub_size).abs / f_M
   end
 
   def get_nb_jobs_champion()
@@ -176,6 +181,7 @@ class Controller
       @perf_slices[@iteration] = self.get_perf(load_evolution_during_submission, @current_max_running)
       return true
     end
+    print "Cannot submit again yet\n"
     return false
   end
 
@@ -219,7 +225,7 @@ class Controller
     jobs=Cigri::Jobset.new(:where => "jobs.state='to_launch' and jobs.cluster_id=#{@cluster.id}")# .to_jobs
     print "jobs_lenght: #{jobs.jobs.length}\n"
     jobs=jobs.to_jobs
-    @prologue_starting = @prologue_starting || jobs.select{ |j| j.props[:tag] = "prologue"}.length == 1
+    @prologue_starting = @prologue_starting || jobs.select{ |j| j.props[:tag] = "prologue"}.length >= 1
     @prologue_done = @prologue_done || (@prologue_starting && jobs.select{ |j| j.props[:tag] = "prologue"}.length == 0)
     print "prologue_starting = #{@prologue_starting}, prologue_done = #{@prologue_done}\n"
     #if @cluster.running_campaigns.length > 0 then
