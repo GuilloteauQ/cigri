@@ -56,6 +56,7 @@ class Controller
       arr = c.split(" ")
       data.push({:time => arr[0].to_i, :load => arr[1].to_f})
     end
+    print "data: #{data}\n")
     return data
   end
 
@@ -65,6 +66,10 @@ class Controller
     n = data.length
 
     diffs = Array.new
+
+    if n <= 1 then
+      return nil
+    end
 
     for i in 1..n do
       e = data[i]
@@ -113,6 +118,10 @@ class Controller
     f_max = max_load[:load]
     t_max = max_load[:time]
     start_writing_phase = self.get_time_start_of_writing_phase(@time_at_start_submission, 0)
+
+    if start_writing_phase.nil? then
+      return 1
+    end
 
     rising_time = (t_max - start_writing_phase[:time]) / 5 # div by 5 because the load is updated every 5 secs
     estimated_N = self.N_estimator(f_max, @load_before_submission, rising_time)
