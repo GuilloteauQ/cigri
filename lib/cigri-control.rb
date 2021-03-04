@@ -131,6 +131,7 @@ class Controller
     rising_time = (t_max - start_writing_phase[:time]) / 5 # div by 5 because the load is updated every 5 secs
     estimated_N = self.N_estimator(f_max, @load_before_submission, rising_time)
     limit_load_for_sub_size = self.compute_limit_load(estimated_N, rising_time) # + @load_before_submission
+    print "limit load: #{limit_load_for_sub_size}\n"
 
     rmax = 100
     # distance_load = @reference - max_load
@@ -221,6 +222,7 @@ class Controller
     current_jobs.get_running(@cluster.id)
     current_jobs.to_jobs
     print "jobs: #{current_jobs.jobs.length}\n"
+    print "perfs: #{@perf_slices}\n"
 
     jobs=Cigri::Jobset.new(:where => "jobs.state='to_launch' and jobs.cluster_id=#{@cluster.id}")# .to_jobs
     print "jobs_lenght: #{jobs.jobs.length}\n"
@@ -243,13 +245,15 @@ class Controller
 
       if @is_champion_running && !@need_to_scan then
         print ">>> Champion Running\n"
-        @wait = !@wait
-        if @wait then
-          return 0
-        else
-          @iteration = @iteration + 1
-          return self.get_nb_jobs_champion()
-        end
+        # @wait = !@wait
+        # if @wait then
+        #   return 0
+        # else
+        #   @iteration = @iteration + 1
+        #   return self.get_nb_jobs_champion()
+        # end
+        @iteration = @iteration + 1
+        return self.get_nb_jobs_champion()
       end
 
       if @iteration < @slices.length && @need_to_scan then
