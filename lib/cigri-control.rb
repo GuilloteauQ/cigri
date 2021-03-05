@@ -69,19 +69,31 @@ class Controller
   def get_time_start_of_writing_phase(submission_time, sensor_id)
     data = self.read_loadavg_per_sensor_for_timeslice(submission_time, Time.now.to_i, sensor_id)
 
+    maximum = data.max_by {|e| e[:load]}
+
     n = data.length
+
+    print "Data: #{data}\n"
 
     diffs = Array.new
 
-    if n <= 1 then
+    if n == 0 then
       return nil
+    end
+
+    if n <= 1 then
+      return data[0]
     end
 
     for i in 1..(n - 1) do
       e = data[i]
+      if e[:time] >= maximum[:time] then
+        break
+      end
       e[:load] = e[:load] - data[i - 1][:load]
       diffs.push(e)
     end
+    print "Diffs: #{diffs}\n"
     return diffs.max_by {|e| e[:load] }
   end
 
