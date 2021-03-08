@@ -139,13 +139,26 @@ class Controller
     return estimated_N * (1 - @alpha**tr) / (1 - @alpha ** @dt)
   end
 
+  def sigmoid(x, c)
+    return 1 / (1 + Math.exp(-c * x))
+  end
+
+  def cost_function_max_load(error)
+    if  error < 0 then
+      return 2 * (sigmoid(error, 1) - 0.5).abs
+    else
+      return 2 * (sigmoid(error, 4) - 0.5).abs
+    end
+  end
+
   def get_perf(f_max, max_running_jobs)
     rmax = 100
     distance_load = @reference - f_max
     max_f_config = 8
     f_M = (@reference > (@reference - max_f_config).abs) ? @reference : (@reference - max_f_config).abs
     alpha = 0.1
-    return  alpha * (rmax - max_running_jobs).abs / rmax + (1 - alpha) * (@reference - f_max).abs / f_M
+    # return  alpha * (rmax - max_running_jobs).abs / rmax + (1 - alpha) * (@reference - f_max).abs / f_M
+    return  alpha * (rmax - max_running_jobs).abs / rmax + (1 - alpha) * cost_function_max_load(distance_load)
   end
 
   def get_nb_jobs_champion()
@@ -240,12 +253,15 @@ class Controller
     print "Has launching jobs: #{@cluster.has_launching_jobs?}\n"
     # if @cluster.has_launching_jobs? then
       # Look if we need to scan
-      if @iteration > 5 && @is_champion_running && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
+      max_load_durung_last_sampling = self.read_loadavg_per_sensor_for_timeslice(Time.now.to_i - @dt, Time.now.to_i).max_by{|e| e[:load]}[:load]
+      # if @iteration > 5 && @is_champion_running && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
+      if @iteration > 5 && @is_champion_running && !@need_to_scan && (@reference - max_load_durung_last_sampling).abs > @threshold then
         @need_to_scan = true
         @is_champion_running = false
         @champion = -1
         @iteration = -1
         @wait_iteration_counter = 0
+        self.init_slices_perfs()
       end
 
       if @is_champion_running && !@need_to_scan then
