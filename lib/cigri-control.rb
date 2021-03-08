@@ -20,7 +20,7 @@ class Controller
 
     @slices = [10, 20, 30, 40, 50]
     # @perf_slices = [0, 0, 0, 0, 0]
-    @perf_slices = Array.new(@slices.length, 0)
+    @perf_slices = Array.new(@slices.length, {})
 
     @is_champion_running = false
     @champion = -1
@@ -32,12 +32,20 @@ class Controller
     @load_before_submission = -1
     @current_max_load = -1
     @alpha = Math.exp(-5/60)
-    @dt = dt / 5
-    print "dt: #{@dt}\n"
+    @dt = dt
 
     @prologue_starting = false
     @prologue_done = false
-    @wait = true
+    @wait_iteration_counter = 0
+
+    self.init_slices_perfs()
+  end
+
+  def init_slices_perfs()
+    n = @slices.length
+    for i in 0..(n - 1) do
+      @perf_slices[i] = {:index => i, :sub_size => @slices[i], :perf => 1, :max_load => -1, :rise_time => -1, :fall_time => -1, :nb_iterations_between_subs => -1}
+    end
   end
 
   def get_fileserver_load()
@@ -131,31 +139,13 @@ class Controller
     return estimated_N * (1 - @alpha**tr) / (1 - @alpha ** @dt)
   end
 
-  def get_perf(data, max_running_jobs)
-    max_load = data.max_by { |e| e[:load]}
-    f_max = max_load[:load]
-    t_max = max_load[:time]
-    start_writing_phase = self.get_time_start_of_writing_phase(@time_at_start_submission, 0)
-
-    if start_writing_phase.nil? then
-      return 1
-    end
-
-    rising_time = (t_max - start_writing_phase[:time]) / 5 # div by 5 because the load is updated every 5 secs
-    print "Rising time: #{rising_time}\n"
-    estimated_N = self.N_estimator(f_max, @load_before_submission, rising_time)
-    print "Est. N : #{estimated_N}\n"
-    limit_load_for_sub_size = self.compute_limit_load(estimated_N, rising_time) # + @load_before_submission
-    print "limit load: #{limit_load_for_sub_size}\n"
-
+  def get_perf(f_max, max_running_jobs)
     rmax = 100
-    # distance_load = @reference - max_load
-    distance_load = @reference - limit_load_for_sub_size
+    distance_load = @reference - f_max
     max_f_config = 8
     f_M = (@reference > (@reference - max_f_config).abs) ? @reference : (@reference - max_f_config).abs
-    print "f_M: #{f_M}\n"
-    alpha = 0
-    return  alpha * (rmax - max_running_jobs).abs / rmax + (1 - alpha) * (@reference - limit_load_for_sub_size).abs / f_M
+    alpha = 0.1
+    return  alpha * (rmax - max_running_jobs).abs / rmax + (1 - alpha) * (@reference - f_max).abs / f_M
   end
 
   def get_nb_jobs_champion()
@@ -194,9 +184,16 @@ class Controller
 
     if current_load - @load_before_submission < 0.3 && nb_jobs_still_running == 0 then
       load_evolution_during_submission = self.read_loadavg_per_sensor_for_timeslice(@time_at_start_submission, Time.now.to_i, 0)
-      # @current_max_load = load_evolution_during_submission.max_by { |e| e[:load] }[:load]
-      # @perf_slices[@iteration] = self.get_perf(@current_max_load, @current_max_running)
-      @perf_slices[@iteration] = self.get_perf(load_evolution_during_submission, @current_max_running)
+      max_load =load_evolution_during_submission.max_by { |e| e[:load]}
+      f_max = max_load[:load]
+      t_max = max_load[:time]
+      time_at_end_submission = Time.now.to_i
+      @perf_slices[@iteration][:max_load] = f_max
+      @perf_slices[@iteration][:rise_time] = t_max - @time_at_start_submission
+      @perf_slices[@iteration][:fall_time] = time_at_end_submission - t_max
+      @perf_slices[@iteration][:nb_iterations_between_subs] = ((time_at_end_submission - t_max) / @dt.to_f).ceil
+
+      @perf_slices[@iteration][:perf] = self.get_perf(f_max, @current_max_running)
       return true
     end
     print "Cannot submit again yet\n"
@@ -220,17 +217,8 @@ class Controller
   end
 
   def champion_selection()
-    # We look at all the perfs form all the slices
-    # and chose the champion
-    index = 0
-    max = @perf_slices[index]
-    for i in 1..(@slices.length - 1) do
-      if max > @perf_slices[i] then # only look the load part
-        index = i
-        max = @perf_slices[i]
-      end
-    end
-    @champion = index
+    champion = @perf_slices.min_by {|e| e[:perf]}
+    @champion = champion[:index]
   end
 
   def get_nb_jobs()
@@ -247,30 +235,30 @@ class Controller
     @prologue_starting = @prologue_starting || jobs.select{ |j| j.props[:tag] = "prologue"}.length >= 1
     @prologue_done = @prologue_done || (@prologue_starting && jobs.select{ |j| j.props[:tag] = "prologue"}.length == 0)
     print "prologue_starting = #{@prologue_starting}, prologue_done = #{@prologue_done}\n"
-    #if @cluster.running_campaigns.length > 0 then
     if @prologue_done then
     # print "jobs: #{jobs.jobs}\n"
     print "Has launching jobs: #{@cluster.has_launching_jobs?}\n"
     # if @cluster.has_launching_jobs? then
       # Look if we need to scan
-      if @iteration > 5000 && @is_champion_running && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
+      if @iteration > 5 && @is_champion_running && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
         @need_to_scan = true
         @is_champion_running = false
         @champion = -1
         @iteration = -1
+        @wait_iteration_counter = 0
       end
 
       if @is_champion_running && !@need_to_scan then
         print ">>> Champion Running\n"
-        # @wait = !@wait
-        # if @wait then
-        #   return 0
-        # else
-        #   @iteration = @iteration + 1
-        #   return self.get_nb_jobs_champion()
-        # end
-        @iteration = @iteration + 1
-        return self.get_nb_jobs_champion()
+        if @wait_iteration_counter == 0 then
+          @wait_iteration_counter = (@wait_iteration_counter + 1) % @perf_slices[@champion][:nb_iterations_between_subs]
+          @iteration = @iteration + 1
+
+          return self.get_nb_jobs_champion()
+        else
+          @wait_iteration_counter = (@wait_iteration_counter + 1) % @perf_slices[@champion][:nb_iterations_between_subs]
+          return 0
+        end
       end
 
       if @iteration < @slices.length && @need_to_scan then
