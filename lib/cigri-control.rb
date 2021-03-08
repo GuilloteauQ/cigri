@@ -255,7 +255,7 @@ class Controller
       # Look if we need to scan
       max_load_during_last_sampling = self.read_loadavg_per_sensor_for_timeslice(Time.now.to_i - @dt, Time.now.to_i, 0).max_by{|e| e[:load]}[:load]
       # if @iteration > 5 && @is_champion_running && !@need_to_scan && (@reference - self.get_fileserver_load()).abs > @threshold then
-      if @iteration > 5 && @is_champion_running && !@need_to_scan && (@reference - max_load_durung_last_sampling).abs > @threshold then
+      if @iteration > 5 && @is_champion_running && !@need_to_scan && (@reference - max_load_during_last_sampling).abs > @threshold then
         @need_to_scan = true
         @is_champion_running = false
         @champion = -1
