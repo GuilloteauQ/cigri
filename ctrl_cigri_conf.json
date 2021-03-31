@@ -1,9 +1,10 @@
 {
     "nb_jobs": 0,
-    "percentage": 50,
-    "kp_jobs": 0.5,
-    "kp_percentage": 10,
+    "percentage": 100,
+    "kp_jobs_load": 0.5,
+    "kp_percentage": 0,
     "kp_jobs_waiting": 0.5,
+    "threshold": 0.0,
     "reference_waiting_queue": 40,
     "reference_load": 3
 }

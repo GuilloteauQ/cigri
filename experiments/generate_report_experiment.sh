@@ -40,6 +40,11 @@ do
             shift # past argument
             shift # past value
             ;;
+        --profile)
+            OAR_PROFILE="$2"
+            shift # past argument
+            shift # past value
+            ;;
         *)    # unknown option
             echo "Option: $key not found !"
             shift # past argument
@@ -233,6 +238,7 @@ ssh root@${CIGRI_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyCheckin
 if [[ "${USES_NFS}" -eq "1" ]]
 then
 	echo "$FILE_SIZES_PATTERN"
+	FILE_SIZES_PATTERN="10M|50M|100M"
     ssh ${STORAGE_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "sh $HOME/NIX/cigri/experiments/start_gc_fileserver.sh \"${FILE_SIZES_PATTERN}\"" &
     PID_GC=$?
 fi
@@ -244,7 +250,8 @@ PID_GRIDSTAT=$?
 
 sleep 10
 
-ssh ${OAR_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "sh $HOME/NIX/cigri/experiments/cluster_profile.sh" &
+# ssh ${OAR_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "sh $HOME/NIX/cigri/experiments/cluster_profile.sh" &
+ssh ${OAR_SERVER} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "python3 $HOME/NIX/oar-profile/run.py ${OAR_PROFILE} --path $HOME/NIX/cigri/experiments/oar-profiles/jobs" &
 
 # exit 0
 
@@ -292,6 +299,8 @@ do
 	# status=$( get_status )
 	nb_terminated=$( get_number_of_terminated_campaigns )
 done
+
+# sleep 2500
 
 ###############################################################################
 ## Get back the logs

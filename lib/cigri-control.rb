@@ -16,23 +16,32 @@ class Controller
     @reference_wait = config_data["reference_waiting_queue"].nil? ? 10 : config_data["reference_waiting_queue"].to_i
     @error_wait= 0
     @error_load = 0
+    @previous_error_load = 0
     @logfile = logfile # TODO: May need to create the file if does not exist
     @cluster = cluster
     @kp_wait= config_data["kp_jobs_waiting"].nil? ? 1 : config_data["kp_jobs_waiting"].to_f
     @kp_load = config_data["kp_jobs_load"].nil? ? 1 : config_data["kp_jobs_load"].to_f
     @kp_percentage = config_data["kp_percentage"].nil? ? 1 : config_data["kp_percentage"].to_f
+    @kd_load = 0# 5
   end
 
   def update_controlled_value()
     print(">> updating controlled values (previous values: (#{@nb_jobs}, #{@percentage}))\n")
-    nb_jobs_load = bound_nb_jobs(@nb_jobs + p_controller(@error_load, @kp_load))
-    nb_jobs_wait = bound_nb_jobs(@nb_jobs + p_controller(@error_wait, @kp_wait))
-    @nb_jobs = min(nb_jobs_load, nb_jobs_wait)
+    if (@error_load).abs() < 0 then
+      nb_jobs_wait = bound_nb_jobs(@nb_jobs + p_controller(@error_wait, @kp_wait))
+      @nb_jobs = min(@nb_jobs, nb_jobs_wait)
+    else
+      nb_jobs_load = bound_nb_jobs(@nb_jobs + pd_controller(@error_load, @previous_error_load, @kp_load, @kd_load))
+      nb_jobs_wait = bound_nb_jobs(@nb_jobs + p_controller(@error_wait, @kp_wait))
+      @nb_jobs = min(nb_jobs_load, nb_jobs_wait)
+    end
     if @nb_jobs > 0
       # If we change the percentage when there is no job, this means
       # that we are regulating the load of an empty cluster...
       # So we make sure this does not happen
-      @percentage = bound_percentage(@percentage + p_controller(@error_load, @kp_percentage))
+      if (@error_load).abs() < 1 then
+        @percentage = bound_percentage(@percentage + p_controller(@error_load, @kp_percentage))
+      end
     end
     print("<< updated controlled values (new values: (#{@nb_jobs}, #{@percentage}))\n")
   end
@@ -47,6 +56,7 @@ class Controller
   end
 
   def update_errors()
+    @previous_error_load = @error_load
     @error_load = @reference_load - self.get_fileserver_load()
     @error_wait = @reference_wait - self.get_waiting_jobs()
   end
@@ -91,6 +101,10 @@ def p_controller(error, k)
   k * error
 end
 
+def pd_controller(error, previous_error, kp, kd)
+  kp * error + kd  * (error - previous_error)
+end
+
 def min(x, y)
   if x < y
     x
@@ -105,7 +119,7 @@ def get_rates_for_campaigns(campaigns, campaign_heaviness, rate, percentage)
   rates = {}
 
   if campaigns.length == 1
-    rates[campaigns[0]] = percentage.to_i * rate
+    rates[campaigns[0]] = (percentage.to_i * rate / 100).to_i
   elsif campaigns.length > 1
     campaign_id0 = campaigns[0]
     campaign_id1 = campaigns[1]
