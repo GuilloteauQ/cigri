@@ -53,7 +53,7 @@ logger.info("Starting runner on #{ARGV[0]}")
 tap_can_be_opened={}
 
 # Define the controller object
-controller = Controller.new("/tmp/log.txt", cluster, config.get('CTRL_CIGRI_CONFIG_FILE'))#"/srv/cigri/ctrl_cigri_conf.json")
+controller = Controller.new("/tmp/log.txt", cluster, config.get('CTRL_CIGRI_CONFIG_FILE'), MIN_CYCLE_DURATION)#"/srv/cigri/ctrl_cigri_conf.json")
 
 while true do
 
@@ -260,7 +260,7 @@ while true do
     controller.update_controlled_value()
 
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
-    if jobs.length == 0 and tolaunch_jobs.get_next_with_respect_to_load(cluster.id, cluster.taps, controller.get_nb_jobs(), controller.get_percentage()) > 0 # if the tap is open
+    if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps, controller.get_nb_jobs()) > 0 # if the tap is open
       logger.info("Got #{tolaunch_jobs.length} jobs to launch")
       # Take the jobs from the b-o-t
       jobs = tolaunch_jobs.take
