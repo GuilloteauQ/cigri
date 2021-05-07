@@ -7,10 +7,14 @@ class Controller
     @nb_jobs = config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
     @reference_load = config_data["reference_load"].nil? ? 3 : config_data["reference_load"].to_i
     @previous_error = 0
+    @previous_previous_error = 0
+    @sum_errors = 0
     @error = 0
     @logfile = logfile # TODO: May need to create the file if does not exist
     @cluster = cluster
     @kp = 0.1
+    @ki = 0.001
+    @kd = 0.01
     @rmax = 100
     @alpha = 1.0 / @rmax
     @h = min_cycle_duration # seconds
@@ -18,7 +22,11 @@ class Controller
   end
 
   def update_controlled_value()
-    @nb_jobs = bound_nb_jobs(@nb_jobs - (@error - @previous_error) / (@alpha * @h) + @kp * @error / @alpha)
+    @nb_jobs = @nb_jobs - (@error - 2*@previous_error + @previous_previous_error) / (@alpha * @h * @h) +
+               @kp * @error / @alpha +
+               @ki * @sum_errors / @alpha +
+               @kd * (@error - @previous_error) / (@alpha * @h)
+    @nb_jobs = bound_nb_jobs(@nb_jobs)
   end
 
   def get_fileserver_load()
@@ -31,8 +39,10 @@ class Controller
   end
 
   def update_errors()
+    @previous_previous_error = @previous_error
     @previous_error = @error
     @error = (@reference_load - self.get_fileserver_load()) / @max_load
+    @sum_errors = @sum_errors + @error
   end
 
   def log()
