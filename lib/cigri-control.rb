@@ -18,7 +18,7 @@ class Controller
   end
 
   def update_controlled_value()
-    @nb_jobs = bound_nb_jobs(@nb_jobs - (@error - @previous_error) / (@alpha * @h) + @kp * @error / @alpha)
+    @nb_jobs = bound_nb_jobs(@nb_jobs + @kp * @error / @alpha)
   end
 
   def get_fileserver_load()
