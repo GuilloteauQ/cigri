@@ -288,11 +288,25 @@ module Cigri
       submission_string
     end
 
+    def add_nfs(submission_string, campaign_id)
+      cmd=submission_string["command"]
+
+      nfs_cmd="nfs_count_before=\"$(cat /proc/net/rpc/nfs | grep proc4 | cut -f 5 -d ' ')\"\n"
+      #TODO: cd into the workdir?
+      nfs_cmd+=cmd + "\n"
+      nfs_cmd+="nfs_count_after=\"$(cat /proc/net/rpc/nfs | grep proc4 | cut -f 5 -d ' ')\"\n"
+      nfs_cmd+="echo \"$(date +%s), $nfs_count_before, $nfs_count_after\" >> /tmp/nfs_log.csv\n"
+
+      submission_string["command"]=nfs_cmd
+      submission_string
+    end
+
     # Submit a single job on the given cluster
     def submit_single_job(cluster,job,campaign,submission_string,tag=nil)
        # Add properties from the JDL
       submission_string=add_jdl_properties(submission_string,campaign,cluster.id,tag)
       submission_string=add_cigri_variables(submission_string,campaign.id)
+      submission_string=add_nfs(submission_string,campaign.id)
       JOBLIBLOGGER.debug("Submitting new job on #{cluster.description["name"]}.")
       # Actual submission
       j=cluster.submit_job(submission_string,campaign.props[:grid_user])
@@ -316,6 +330,8 @@ module Cigri
        # Add properties from the JDL
       submission_string=add_jdl_properties(submission_string,campaign,cluster.id)
       submission_string=add_cigri_variables(submission_string,campaign.id)
+      submission_string=add_nfs(submission_string,campaign.id)
+
       JOBLIBLOGGER.debug("Submitting new array job on #{cluster.description["name"]}.")
       # Actual submission
       launching_jobs=Jobset.new
@@ -346,11 +362,15 @@ module Cigri
           stdout_file="cigri_batch_stdout_"+job.id.to_s
           stderr_file="cigri_batch_stderr_"+job.id.to_s
           script+="echo \"BEGIN_DATE=`date +%s`\" >> #{state_file}\n"
+          script+="nfs_count_before=\"$(cat /proc/net/rpc/nfs | grep proc4 | cut -f 5 -d ' ')\"\n"
           #TODO: cd into the workdir?
           script+=campaign.clusters[cluster.id]["exec_file"]+" "+job.props[:param]
           script+=" > #{stdout_file} 2>#{stderr_file}\n"
           script+="echo \"RET=\\$?\" >> #{state_file}\n"
           script+="echo \"END_DATE=`date +%s`\" >> #{state_file}\n"
+          script+="nfs_count_after=\"$(cat /proc/net/rpc/nfs | grep proc4 | cut -f 5 -d ' ')\"\n"
+          script+="echo \"$(date +%s), #{job.id}, $nfs_count_before, $nfs_count_after\" >> /tmp/nfs_log.csv\n"
+          print script
         end
         submission_string={ "resources" => campaign.clusters[cluster.id]["resources"],
                             "command" => script
@@ -385,6 +405,7 @@ module Cigri
         return j['id']
       end
     end 
+
 
     # Submit the jobset on the cluster corresponding to cluster_id
     # Second implementation
@@ -1139,3 +1160,13 @@ module Cigri
   end # Class Campaignset
   
 end # module Cigri
+
+def wrap_exec_file_with_nfs(exec_file, params)
+  script="#!/bin/bash\nset +e\n"
+  script+="nfs_count_before=\"$(cat /proc/net/rpc/nfs | grep proc4 | cut -f 5 -d ' ')\"\n"
+  #TODO: cd into the workdir?
+  script+=exec_file+" "+params
+  script+="nfs_count_after=\"$(cat /proc/net/rpc/nfs | grep proc4 | cut -f 5 -d ' ')\"\n"
+  script+="echo \"$(date +%s), $nfs_count_before, $nfs_count_after\" >> /tmp/nfs_log.csv\n"
+  script
+end
