@@ -11,7 +11,7 @@ class Controller
   def initialize(logfile, cluster, config_file)
     config_data = JSON.parse(File.read(config_file))
     @nb_jobs = config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
-    @reference = config_data["reference"].nil? ? 10 : config_data["reference"].to_i
+    @reference = config_data["reference"].nil? ? 3 : config_data["reference"].to_i
 	@error = 0
     @cumulated_error = 0
     @kp = config_data["kp"].nil? ? 0 : config_data["kp"].to_f
@@ -31,7 +31,7 @@ class Controller
 
   def log()
 	file = File.open(@logfile, "a+")
-    file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}\n"
+        file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_fileserver_load()}\n"
     file.close
   end
 
@@ -47,6 +47,15 @@ class Controller
 
   def get_cluster_load()
 	@cluster.get_global_stress_factor
+  end
+
+  def get_fileserver_load()
+      loadavg_per_sensor = []
+      Dir.glob("/tmp/loadavg_storage_server[0-9]").sort().each_with_index do |f, i|
+	l =  `tail -n 1 #{f}`.split()
+	loadavg_per_sensor[i] = {:date => l[0], :mn1 => l[1].to_f, :mn5 => l[2].to_f, :mn15 => l[3].to_f}
+      end
+      loadavg_per_sensor[0][:mn1]
   end
 
   def get_error()

@@ -43,6 +43,7 @@ if config.exists?('RUNNER_MIN_CYCLE_DURATION')
 else
   MIN_CYCLE_DURATION = 5
 end
+MIN_CYCLE_DURATION = 30
 
 def notify_judas
   Process.kill("USR1",Process.ppid)
@@ -256,7 +257,8 @@ while true do
     jobs.remove_blacklisted(cluster.id)
 
     controller.log()
-    controller.update_error(controller.get_waiting_jobs())
+    # controller.update_error(controller.get_waiting_jobs())
+    controller.update_error(controller.get_fileserver_load())
     controller.update_controlled_value()
 
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)

@@ -1,6 +1,6 @@
 {
-    "nb_jobs": 10,
-    "reference": 10,
-    "kp": 0.01,
-    "ki": 0.01
+    "nb_jobs": 0,
+    "reference": 3,
+    "kp": 0.5,
+    "ki": 0.89
 }
