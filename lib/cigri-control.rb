@@ -21,7 +21,7 @@ class Controller
   end
 
   def update_controlled_value()
-	@nb_jobs = @nb_jobs + @kp * @error + @ki * @cumulated_error
+	@nb_jobs =  @kp * @error + @ki * @cumulated_error
   end
 
   def update_error(value)
