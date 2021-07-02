@@ -11,7 +11,7 @@ class Controller
   def initialize(logfile, cluster, config_file)
     config_data = JSON.parse(File.read(config_file))
     @nb_jobs = config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
-    @reference = config_data["reference"].nil? ? 3 : config_data["reference"].to_i
+    @reference = config_data["reference"].nil? ? 3 : config_data["reference"].to_f
 	@error = 0
     @cumulated_error = 0
     @kp = config_data["kp"].nil? ? 0 : config_data["kp"].to_f
@@ -21,7 +21,7 @@ class Controller
   end
 
   def update_controlled_value()
-	@nb_jobs =  @kp * @error + @ki * @cumulated_error
+	@nb_jobs = bound_jobs(@kp * @error + @ki * @cumulated_error)
   end
 
   def update_error(value)
@@ -31,7 +31,8 @@ class Controller
 
   def log()
 	file = File.open(@logfile, "a+")
-        file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_fileserver_load()}\n"
+        # file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_fileserver_load()}, #{@reference}\n"
+        file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.read_busy_resources_sensors}, #{self.get_fileserver_load()}, #{@reference}\n"
     file.close
   end
 
@@ -39,6 +40,16 @@ class Controller
 	cluster_jobs = @cluster.get_jobs()
     cluster_jobs.select{|j| j["state"] == "Running" or j["state"] == "Finishing" or j["state"] == "Launching"}.length
   end
+
+  def read_busy_resources_sensors()
+    busy_resources_cluster = []
+    Dir.glob("/tmp/busy_resources_cluster[0-9]").sort().each_with_index do |f, i|
+      l =  `tail -n 1 #{f}`.split()
+       busy_resources_cluster[i] = {:date => l[0], :busy => l[1].to_f}
+    end
+    return busy_resources_cluster[0][:busy]
+  end
+
 
   def get_waiting_jobs()
 	cluster_jobs = @cluster.get_jobs()
@@ -66,4 +77,12 @@ class Controller
 	@nb_jobs
   end
 
+end
+
+def bound_jobs(x)
+  if x < 0 then
+    0
+  else
+    x
+  end
 end
