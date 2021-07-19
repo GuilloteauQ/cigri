@@ -11,42 +11,31 @@ class Controller
   #   - some constant matrices
   def initialize(logfile, cluster, config_file)
     config_data = JSON.parse(File.read(config_file))
+    # Getting the values from the config
     @nb_jobs = config_data["nb_jobs"].nil? ? 0 : config_data["nb_jobs"].to_i
     @reference = config_data["reference"].nil? ? 3 : config_data["reference"].to_f
-	@error = 0
+    @ks = config_data["ks"].to_f
+    @Mp = config_data["Mp"].to_f
+    @filesize = config_data["filesize"].to_f
+
+    # Getting the values of the gains
+    @r = Math.exp(- 4.0 / @ks)
+    @theta = BigMath.PI * Math.log(@r) / Math.log(@Mp)
+    @a = (Math.exp(-5.0 / 60.0)) ** (30.0 / 5.0)
+    @b = 0.00179 * @filesize * (1.0 - @a)
+
+    @kp = (@a - @r * @r) / @b
+    @ki = (@r * @r - 2.0 * @r * Math.cos(@theta) + 1.0) / @b
+
+    @logfile = logfile
+    @cluster = cluster
+
+    @error = 0
     @cumulated_error = 0
-    @kp = config_data["kp"].nil? ? 0 : config_data["kp"].to_f
-    @ki = config_data["ki"].nil? ? 0 : config_data["ki"].to_f
-	@logfile = logfile # TODO: May need to create the file if does not exist
-	@cluster = cluster
-
-        @a = Math.exp(-5.0/60.0) ** (30.0 / 5.0)
-        @b = 0.5
-        @ks = config_data["ks"].to_f
-        @Mp = config_data["Mp"].to_f
-        @Sn = 0.0
-        @previous_load = 0.0
-        @forgetting_factor = config_data["forgetting_factor"].to_f
-  end
-
-  def get_gains()
-    r = Math.exp(-4.0 / @ks)
-    theta = BigMath.PI(9) * Math.log(r) / Math.log(@Mp)
-    @kp = (@a - r * r) / @b
-    @ki = (r * r - 2 * r * Math.cos(theta) + 1) / @b
-  end
-
-  def update_estimation_b(current_load)
-    if @nb_jobs.floor > 0
-      @b = @forgetting_factor * @b * @Sn - @nb_jobs.floor * (current_load - @a * @previous_load)
-      @Sn = @forgetting_factor * @Sn + (@nb_jobs.floor * @nb_jobs.floor)
-      @b = @b / @Sn
-    end
-    @previous_load = current_load
   end
 
   def update_controlled_value()
-	@nb_jobs = bound_jobs(@kp * @error + @ki * @cumulated_error)
+    @nb_jobs = bound_jobs(@kp * @error + @ki * @cumulated_error)
   end
 
   def update_error(value)
@@ -54,10 +43,15 @@ class Controller
     @cumulated_error = @cumulated_error + @error
   end
 
+  def header_log()
+    file = File.open(@logfile, "a+")
+    file << "time, nb_jobs, waiting, running, load, ref, kp, ki, filesize, ks, Mp, a, b\n"
+    file.close
+  end
+
   def log()
 	file = File.open(@logfile, "a+")
-        # file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_fileserver_load()}, #{@reference}\n"
-        file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.read_busy_resources_sensors}, #{self.get_fileserver_load()}, #{@reference}, #{@b}, #{@kp}, #{@ki}\n"
+        file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.read_busy_resources_sensors}, #{self.get_fileserver_load()}, #{@reference}, #{@kp}, #{@ki}, #{@filesize}, #{@ks}, #{@Mp}, #{@a}, #{@b}\n"
     file.close
   end
 

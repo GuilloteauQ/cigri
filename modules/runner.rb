@@ -55,6 +55,7 @@ tap_can_be_opened={}
 
 # Define the controller object
 controller = Controller.new("/tmp/log.txt", cluster, config.get('CTRL_CIGRI_CONFIG_FILE'))#"/srv/cigri/ctrl_cigri_conf.json")
+controller.header_log()
 
 while true do
 
@@ -267,8 +268,6 @@ while true do
     if prologue_terminated then
       fileserver_load = controller.get_fileserver_load()
       controller.update_error(fileserver_load)
-      controller.update_estimation_b(fileserver_load)
-      controller.get_gains()
       controller.update_controlled_value()
     end
 
