@@ -1,5 +1,6 @@
 require 'cigri-clusterlib'
 require 'json'
+require 'bigdecimal/math'
 
 class Controller
   # We try to give a generic API for the controller
@@ -18,6 +19,30 @@ class Controller
     @ki = config_data["ki"].nil? ? 0 : config_data["ki"].to_f
 	@logfile = logfile # TODO: May need to create the file if does not exist
 	@cluster = cluster
+
+        @a = Math.exp(-5.0/60.0) ** (30.0 / 5.0)
+        @b = 0.5
+        @ks = config_data["ks"].to_f
+        @Mp = config_data["Mp"].to_f
+        @Sn = 0.0
+        @previous_load = 0.0
+        @forgetting_factor = config_data["forgetting_factor"].to_f
+  end
+
+  def get_gains()
+    r = Math.exp(-4.0 / @ks)
+    theta = BigMath.PI(9) * Math.log(r) / Math.log(@Mp)
+    @kp = (@a - r * r) / @b
+    @ki = (r * r - 2 * r * Math.cos(theta) + 1) / @b
+  end
+
+  def update_estimation_b(current_load)
+    if @nb_jobs.floor > 0
+      @b = @forgetting_factor * @b * @Sn - @nb_jobs.floor * (current_load - @a * @previous_load)
+      @Sn = @forgetting_factor * @Sn + (@nb_jobs.floor * @nb_jobs.floor)
+      @b = @b / @Sn
+    end
+    @previous_load = current_load
   end
 
   def update_controlled_value()
@@ -25,14 +50,14 @@ class Controller
   end
 
   def update_error(value)
-	@error = @reference - value
+    @error = @reference - value
     @cumulated_error = @cumulated_error + @error
   end
 
   def log()
 	file = File.open(@logfile, "a+")
         # file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.get_running_jobs()}, #{self.get_fileserver_load()}, #{@reference}\n"
-        file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.read_busy_resources_sensors}, #{self.get_fileserver_load()}, #{@reference}\n"
+        file << "#{Time.now.to_i}, #{@nb_jobs}, #{self.get_waiting_jobs()}, #{self.read_busy_resources_sensors}, #{self.get_fileserver_load()}, #{@reference}, #{@b}, #{@kp}, #{@ki}\n"
     file.close
   end
 

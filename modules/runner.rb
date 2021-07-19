@@ -256,10 +256,21 @@ while true do
     jobs=Cigri::Jobset.new(:where => "jobs.state='to_launch' and jobs.cluster_id=#{cluster.id}")
     jobs.remove_blacklisted(cluster.id)
 
+    prologue_terminated = cluster.running_campaigns.any? { |campaign_id| 
+
+      Cigri::Jobset.new({:where => "tag='prologue' 
+                                  and jobs.state='terminated' 
+                                  and jobs.campaign_id=#{campaign_id}
+                                  and jobs.cluster_id=#{cluster.id}"}).length > 0
+    }
     controller.log()
-    # controller.update_error(controller.get_waiting_jobs())
-    controller.update_error(controller.get_fileserver_load())
-    controller.update_controlled_value()
+    if prologue_terminated then
+      fileserver_load = controller.get_fileserver_load()
+      controller.update_error(fileserver_load)
+      controller.update_estimation_b(fileserver_load)
+      controller.get_gains()
+      controller.update_controlled_value()
+    end
 
     # Get the jobs in the bag of tasks (if no more remaining to_launch jobs to treat)
     if jobs.length == 0 and tolaunch_jobs.get_next(cluster.id, cluster.taps, controller.get_nb_jobs()) > 0 # if the tap is open
